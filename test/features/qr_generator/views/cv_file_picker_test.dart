@@ -139,9 +139,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Envoi en cours…'), findsOneWidget);
+    // Le bouton explique pourquoi il est indisponible.
+    expect(find.text('Générer le QR Code'), findsNothing);
     FilledButton generate() => tester.widget<FilledButton>(
       find.ancestor(
-        of: find.text('Générer le QR Code'),
+        of: find.text('Envoi du fichier…'),
         matching: find.byWidgetPredicate((w) => w is FilledButton),
       ),
     );

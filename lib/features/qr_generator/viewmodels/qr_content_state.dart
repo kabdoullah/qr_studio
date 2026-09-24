@@ -48,6 +48,7 @@ class QrContentState {
     this.cv = const FileState(),
     this.cardImage = const FileState(),
     this.showErrorsFor = const {},
+    this.failedGenerations = 0,
     this.result,
   });
 
@@ -65,6 +66,10 @@ class QrContentState {
   // s'affichent toutes, y compris sur les champs jamais touchés. Les autres
   // types n'affichent leurs erreurs qu'après interaction.
   final Set<QrType> showErrorsFor;
+
+  // Incrémenté à chaque génération refusée : le formulaire amène alors la
+  // première erreur à l'écran, même si l'utilisateur a défilé plus bas.
+  final int failedGenerations;
 
   final QrCodeData? result;
 
@@ -121,6 +126,7 @@ class QrContentState {
     FileState? cv,
     FileState? cardImage,
     Set<QrType>? showErrorsFor,
+    int? failedGenerations,
     QrCodeData? result,
   }) {
     return QrContentState(
@@ -131,6 +137,7 @@ class QrContentState {
       cv: cv ?? this.cv,
       cardImage: cardImage ?? this.cardImage,
       showErrorsFor: showErrorsFor ?? this.showErrorsFor,
+      failedGenerations: failedGenerations ?? this.failedGenerations,
       result: result ?? this.result,
     );
   }

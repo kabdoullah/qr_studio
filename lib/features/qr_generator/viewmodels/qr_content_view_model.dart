@@ -115,7 +115,10 @@ class QrContentViewModel extends Notifier<QrContentState> {
 
     // Garde-fou : un contenu trop volumineux ne produirait pas de QR Code.
     if (payload == null || !QrService.fitsInQrCode(payload)) {
-      state = state.copyWith(showErrorsFor: {...state.showErrorsFor, type});
+      state = state.copyWith(
+        showErrorsFor: {...state.showErrorsFor, type},
+        failedGenerations: state.failedGenerations + 1,
+      );
       return null;
     }
 

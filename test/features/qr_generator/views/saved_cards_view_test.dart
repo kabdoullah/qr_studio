@@ -78,7 +78,18 @@ void main() {
     await tester.enterText(find.byType(TextField), 'inconnu');
     await tester.pump(SavedCardsViewModel.searchDelay);
     await tester.pumpAndSettle();
-    expect(find.text('Aucune carte trouvée.'), findsOneWidget);
+    expect(
+      find.text('Aucune carte ne correspond à « inconnu ».'),
+      findsOneWidget,
+    );
+
+    // Effacer la recherche affiche de nouveau toutes les cartes.
+    await tester.tap(find.byTooltip('Effacer la recherche'));
+    await tester.pump(SavedCardsViewModel.searchDelay);
+    await tester.pumpAndSettle();
+    expect(find.text('Awa Traoré'), findsOneWidget);
+    expect(find.text('Jean Kouassi'), findsOneWidget);
+    expect(find.byTooltip('Effacer la recherche'), findsNothing);
   });
 
   testWidgets('choisir une carte remplit le formulaire et l’aperçu', (

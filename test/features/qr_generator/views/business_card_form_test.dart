@@ -40,6 +40,40 @@ void main() {
     expect(find.text('Générer le QR Code'), findsOneWidget);
   });
 
+  group('champs sur deux colonnes', () {
+    Future<void> pumpAt(
+      WidgetTester tester,
+      double width, {
+      double textScale = 1,
+    }) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await openBusinessCard(tester);
+    }
+
+    double top(WidgetTester tester, String label) =>
+        tester.getTopLeft(field(label)).dy;
+
+    testWidgets('prénom et nom côte à côte sur un téléphone', (tester) async {
+      await pumpAt(tester, 390);
+      expect(top(tester, 'Nom *'), top(tester, 'Prénom *'));
+      expect(top(tester, 'Pays'), top(tester, 'Ville'));
+    });
+
+    testWidgets("l'un sous l'autre sur petit écran", (tester) async {
+      await pumpAt(tester, 320);
+      expect(top(tester, 'Nom *'), greaterThan(top(tester, 'Prénom *')));
+    });
+
+    testWidgets("l'un sous l'autre avec un texte agrandi", (tester) async {
+      await pumpAt(tester, 390, textScale: 1.5);
+      expect(top(tester, 'Nom *'), greaterThan(top(tester, 'Prénom *')));
+    });
+  });
+
   testWidgets("aucune erreur n'est affichée avant interaction", (tester) async {
     await openBusinessCard(tester);
 
@@ -58,6 +92,37 @@ void main() {
     expect(find.text('Veuillez saisir votre prénom.'), findsOneWidget);
     expect(find.text('Veuillez saisir votre nom.'), findsOneWidget);
     expect(container.read(qrContentViewModelProvider).result, isNull);
+  });
+
+  testWidgets('une génération refusée ramène à la première erreur', (
+    tester,
+  ) async {
+    // Téléphone : le formulaire dépasse la hauteur de l'écran.
+    tester.view.physicalSize = const Size(390, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await openBusinessCard(tester);
+    await tester.enterText(field('Nom *'), 'Traoré');
+    // L'utilisateur ferme le clavier et défile jusqu'en bas du formulaire.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    final scroll = tester
+        .state<ScrollableState>(
+          find.ancestor(
+            of: field('WhatsApp'),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    scroll.jumpTo(scroll.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(field('Prénom *').hitTestable(), findsNothing);
+
+    await tester.tap(find.text('Générer le QR Code'));
+    await tester.pumpAndSettle();
+
+    expect(field('Prénom *').hitTestable(), findsOneWidget);
+    expect(find.text('Veuillez saisir votre prénom.'), findsOneWidget);
   });
 
   testWidgets("un email invalide est signalé pendant la saisie", (

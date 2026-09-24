@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_router.dart';
 
 import '../models/qr_type.dart';
+import '../viewmodels/qr_content_state.dart';
 import '../viewmodels/qr_content_view_model.dart';
 import '../viewmodels/qr_generator_view_model.dart';
 import '../models/shared_file.dart';
@@ -126,6 +127,15 @@ class _GenerateButton extends ConsumerWidget {
         (s) => s.cv.isBusy || s.cardImage.isBusy,
       ),
     );
+    // L'envoi peut prendre plusieurs secondes (serveur en veille) : le
+    // bouton explique pourquoi il est indisponible.
+    final isUploading = ref.watch(
+      qrContentViewModelProvider.select(
+        (s) =>
+            s.cv.status == FileStatus.uploading ||
+            s.cardImage.status == FileStatus.uploading,
+      ),
+    );
 
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
@@ -140,8 +150,13 @@ class _GenerateButton extends ConsumerWidget {
                   context.push(AppRoutes.result);
                 }
               },
-        icon: const Icon(Icons.qr_code_2_rounded),
-        label: const Text('Générer le QR Code'),
+        icon: isUploading
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.qr_code_2_rounded),
+        label: Text(isUploading ? 'Envoi du fichier…' : 'Générer le QR Code'),
       ),
     );
   }

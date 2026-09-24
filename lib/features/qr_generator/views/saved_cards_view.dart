@@ -8,19 +8,38 @@ import '../viewmodels/qr_content_view_model.dart';
 import '../viewmodels/saved_cards_view_model.dart';
 
 // Cartes partagées : toucher une carte remplit le formulaire.
-class SavedCardsView extends ConsumerWidget {
+class SavedCardsView extends ConsumerStatefulWidget {
   const SavedCardsView({super.key});
 
   static const double _maxContentWidth = 560;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SavedCardsView> createState() => _SavedCardsViewState();
+}
+
+class _SavedCardsViewState extends ConsumerState<SavedCardsView> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cards = ref.watch(savedCardsProvider);
     final viewModel = ref.read(savedCardsProvider.notifier);
+    final query = _search.text.trim();
 
     void select(SavedBusinessCard card) {
       ref.read(qrContentViewModelProvider.notifier).loadBusinessCard(card.data);
       context.pop();
+    }
+
+    void clearSearch() {
+      _search.clear();
+      viewModel.updateQuery('');
     }
 
     return Scaffold(
@@ -29,29 +48,43 @@ class SavedCardsView extends ConsumerWidget {
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+            constraints: const BoxConstraints(
+              maxWidth: SavedCardsView._maxContentWidth,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                  child: TextField(
-                    onChanged: viewModel.updateQuery,
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      labelText: 'Rechercher',
-                      hintText: 'Nom, entreprise, ville…',
-                      prefixIcon: Icon(Icons.search_rounded),
+                  child: ValueListenableBuilder(
+                    valueListenable: _search,
+                    builder: (context, value, _) => TextField(
+                      controller: _search,
+                      onChanged: viewModel.updateQuery,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        labelText: 'Rechercher',
+                        hintText: 'Nom, entreprise, ville…',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: value.text.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: clearSearch,
+                                tooltip: 'Effacer la recherche',
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                      ),
                     ),
                   ),
                 ),
                 Expanded(
                   child: switch (cards) {
-                    AsyncData(:final value) when value.isEmpty =>
-                      const _Message(
-                        icon: Icons.person_search_outlined,
-                        text: 'Aucune carte trouvée.',
-                      ),
+                    AsyncData(:final value) when value.isEmpty => _Message(
+                      icon: Icons.person_search_outlined,
+                      text: query.isEmpty
+                          ? 'Aucune carte partagée pour le moment.'
+                          : 'Aucune carte ne correspond à « $query ».',
+                    ),
                     AsyncData(:final value) => _CardList(
                       cards: value,
                       onSelect: select,

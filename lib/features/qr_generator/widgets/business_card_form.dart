@@ -8,11 +8,35 @@ import '../viewmodels/qr_content_state.dart';
 import '../viewmodels/qr_content_view_model.dart';
 
 // Formulaire de la carte de visite, organisé en sections.
-class BusinessCardForm extends ConsumerWidget {
+class BusinessCardForm extends ConsumerStatefulWidget {
   const BusinessCardForm({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BusinessCardForm> createState() => _BusinessCardFormState();
+}
+
+class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
+  GlobalKey<FormState> _formKey = GlobalKey();
+  int _revision = 0;
+
+  // Amène le premier champ en erreur à l'écran (et l'annonce aux lecteurs
+  // d'écran) : sans cela, une génération refusée passe inaperçue quand
+  // l'utilisateur a défilé vers le bas du formulaire.
+  void _revealFirstError() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final invalid = _formKey.currentState?.validateGranularly();
+      if (invalid == null || invalid.isEmpty || !mounted) return;
+      Scrollable.ensureVisible(
+        invalid.first.context,
+        alignment: 0.1,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Valeurs initiales : conservées lorsque l'utilisateur revient modifier.
     final card = ref.read(qrContentViewModelProvider).businessCard;
     final showAllErrors = ref.watch(
@@ -28,10 +52,18 @@ class BusinessCardForm extends ConsumerWidget {
     final revision = ref.watch(
       qrContentViewModelProvider.select((s) => s.businessCardRevision),
     );
+    // Nouvelle clé : les champs sont recréés avec la carte chargée.
+    if (revision != _revision) {
+      _revision = revision;
+      _formKey = GlobalKey();
+    }
+    ref.listen(
+      qrContentViewModelProvider.select((s) => s.failedGenerations),
+      (_, _) => _revealFirstError(),
+    );
 
     return Form(
-      // Nouvelle clé : les champs sont recréés avec la carte chargée.
-      key: ValueKey(revision),
+      key: _formKey,
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
           : AutovalidateMode.onUserInteraction,
@@ -40,51 +72,57 @@ class BusinessCardForm extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _SectionTitle('Informations personnelles'),
-            _Field(
-              label: 'Prénom *',
-              initialValue: card.firstName,
-              autofillHints: const [AutofillHints.givenName],
-              textCapitalization: TextCapitalization.words,
-              onChanged: (v) => update((c) => c.copyWith(firstName: v)),
-              validator: (v) => QrContentState.validateFirstName(v ?? ''),
+            _FieldRow(
+              first: _Field(
+                label: 'Prénom *',
+                initialValue: card.firstName,
+                autofillHints: const [AutofillHints.givenName],
+                textCapitalization: TextCapitalization.words,
+                onChanged: (v) => update((c) => c.copyWith(firstName: v)),
+                validator: (v) => QrContentState.validateFirstName(v ?? ''),
+              ),
+              second: _Field(
+                label: 'Nom *',
+                initialValue: card.lastName,
+                autofillHints: const [AutofillHints.familyName],
+                textCapitalization: TextCapitalization.words,
+                onChanged: (v) => update((c) => c.copyWith(lastName: v)),
+                validator: (v) => QrContentState.validateLastName(v ?? ''),
+              ),
             ),
-            _Field(
-              label: 'Nom *',
-              initialValue: card.lastName,
-              autofillHints: const [AutofillHints.familyName],
-              textCapitalization: TextCapitalization.words,
-              onChanged: (v) => update((c) => c.copyWith(lastName: v)),
-              validator: (v) => QrContentState.validateLastName(v ?? ''),
-            ),
-            _Field(
-              label: 'Fonction',
-              initialValue: card.jobTitle,
-              autofillHints: const [AutofillHints.jobTitle],
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (v) => update((c) => c.copyWith(jobTitle: v)),
-            ),
-            _Field(
-              label: 'Entreprise',
-              initialValue: card.company,
-              autofillHints: const [AutofillHints.organizationName],
-              textCapitalization: TextCapitalization.words,
-              onChanged: (v) => update((c) => c.copyWith(company: v)),
+            _FieldRow(
+              first: _Field(
+                label: 'Fonction',
+                initialValue: card.jobTitle,
+                autofillHints: const [AutofillHints.jobTitle],
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (v) => update((c) => c.copyWith(jobTitle: v)),
+              ),
+              second: _Field(
+                label: 'Entreprise',
+                initialValue: card.company,
+                autofillHints: const [AutofillHints.organizationName],
+                textCapitalization: TextCapitalization.words,
+                onChanged: (v) => update((c) => c.copyWith(company: v)),
+              ),
             ),
             const _SectionTitle('Contact'),
-            _Field(
-              label: 'Téléphone',
-              initialValue: card.phone,
-              keyboardType: TextInputType.phone,
-              autofillHints: const [AutofillHints.telephoneNumber],
-              onChanged: (v) => update((c) => c.copyWith(phone: v)),
-            ),
-            _Field(
-              label: 'Email',
-              initialValue: card.email,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              onChanged: (v) => update((c) => c.copyWith(email: v)),
-              validator: (v) => QrContentState.validateEmail(v ?? ''),
+            _FieldRow(
+              first: _Field(
+                label: 'Téléphone',
+                initialValue: card.phone,
+                keyboardType: TextInputType.phone,
+                autofillHints: const [AutofillHints.telephoneNumber],
+                onChanged: (v) => update((c) => c.copyWith(phone: v)),
+              ),
+              second: _Field(
+                label: 'Email',
+                initialValue: card.email,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                onChanged: (v) => update((c) => c.copyWith(email: v)),
+                validator: (v) => QrContentState.validateEmail(v ?? ''),
+              ),
             ),
             _Field(
               label: 'Site web',
@@ -102,34 +140,38 @@ class BusinessCardForm extends ConsumerWidget {
               textCapitalization: TextCapitalization.sentences,
               onChanged: (v) => update((c) => c.copyWith(address: v)),
             ),
-            _Field(
-              label: 'Ville',
-              initialValue: card.city,
-              autofillHints: const [AutofillHints.addressCity],
-              textCapitalization: TextCapitalization.words,
-              onChanged: (v) => update((c) => c.copyWith(city: v)),
-            ),
-            _Field(
-              label: 'Pays',
-              initialValue: card.country,
-              autofillHints: const [AutofillHints.countryName],
-              textCapitalization: TextCapitalization.words,
-              onChanged: (v) => update((c) => c.copyWith(country: v)),
+            _FieldRow(
+              first: _Field(
+                label: 'Ville',
+                initialValue: card.city,
+                autofillHints: const [AutofillHints.addressCity],
+                textCapitalization: TextCapitalization.words,
+                onChanged: (v) => update((c) => c.copyWith(city: v)),
+              ),
+              second: _Field(
+                label: 'Pays',
+                initialValue: card.country,
+                autofillHints: const [AutofillHints.countryName],
+                textCapitalization: TextCapitalization.words,
+                onChanged: (v) => update((c) => c.copyWith(country: v)),
+              ),
             ),
             const _SectionTitle('Réseaux sociaux', subtitle: 'Facultatif'),
-            _Field(
-              label: 'LinkedIn',
-              hint: "Lien ou nom d'utilisateur",
-              initialValue: card.linkedin,
-              keyboardType: TextInputType.url,
-              onChanged: (v) => update((c) => c.copyWith(linkedin: v)),
-            ),
-            _Field(
-              label: 'Instagram',
-              hint: "@nom d'utilisateur",
-              initialValue: card.instagram,
-              keyboardType: TextInputType.url,
-              onChanged: (v) => update((c) => c.copyWith(instagram: v)),
+            _FieldRow(
+              first: _Field(
+                label: 'LinkedIn',
+                hint: 'Lien ou identifiant',
+                initialValue: card.linkedin,
+                keyboardType: TextInputType.url,
+                onChanged: (v) => update((c) => c.copyWith(linkedin: v)),
+              ),
+              second: _Field(
+                label: 'Instagram',
+                hint: '@identifiant',
+                initialValue: card.instagram,
+                keyboardType: TextInputType.url,
+                onChanged: (v) => update((c) => c.copyWith(instagram: v)),
+              ),
             ),
             _Field(
               label: 'WhatsApp',
@@ -142,6 +184,41 @@ class BusinessCardForm extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Deux champs côte à côte, ou l'un sous l'autre quand la largeur disponible
+// (rapportée à la taille du texte) ne suffit pas.
+class _FieldRow extends StatelessWidget {
+  const _FieldRow({required this.first, required this.second});
+
+  // Largeur minimale, à taille de texte normale, pour deux colonnes lisibles.
+  static const double _minTwoColumnWidth = 320;
+
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < _minTwoColumnWidth * textScale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [first, second],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: first),
+            const SizedBox(width: 12),
+            Expanded(child: second),
+          ],
+        );
+      },
     );
   }
 }
