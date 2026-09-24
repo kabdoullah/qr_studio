@@ -1,9 +1,8 @@
 """Stockage des fichiers mis en ligne.
 
 - `LocalFileStore` : disque + SQLite, pour le développement et les tests.
-- `R2FileStore` : Cloudflare R2, durable, pour la production. Les
-  métadonnées (nom, type) sont stockées avec l'objet : aucune base de
-  données n'est nécessaire.
+- `PostgresFileStore` : fichiers et métadonnées dans PostgreSQL (Neon),
+  durable, pour la production.
 """
 
 import secrets
@@ -12,8 +11,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator, Optional, Protocol
-from urllib.parse import quote, unquote
+from typing import Iterator, Optional, Protocol
 
 from .config import Settings
 
@@ -44,6 +42,9 @@ class FileStore(Protocol):
 
     def open(self, file: StoredFile) -> Iterator[bytes]:
         """Contenu du fichier, lu par morceaux."""
+
+    def total_bytes(self) -> int:
+        """Espace occupé par l'ensemble des fichiers."""
 
 
 class LocalFileStore:
@@ -100,71 +101,78 @@ class LocalFileStore:
             while chunk := source.read(CHUNK_SIZE):
                 yield chunk
 
+    def total_bytes(self) -> int:
+        with self._connect() as db:
+            return db.execute("SELECT COALESCE(SUM(size), 0) FROM files").fetchone()[0]
 
-class R2FileStore:
-    """Objets rangés sous `<kind>/<id>`, avec type et nom d'origine."""
 
-    def __init__(self, client: Any, bucket: str) -> None:
-        self._client = client
-        self._bucket = bucket
+class PostgresFileStore:
+    """Fichiers stockés en `bytea` (10 MB maximum chacun)."""
 
-    @staticmethod
-    def _key(file_id: str, kind: str) -> str:
-        return f"{kind}/{file_id}"
+    def __init__(self, database_url: str) -> None:
+        self._database_url = database_url
+        with self._connect() as db:
+            db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS files (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    content_type TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    data BYTEA NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+
+    def _connect(self):
+        import psycopg
+
+        # Une connexion par opération : suffisant pour ce trafic, et
+        # compatible avec le pooler de Neon (pas de requêtes préparées).
+        return psycopg.connect(self._database_url, prepare_threshold=None)
 
     def save(self, file: StoredFile, source: Path) -> None:
-        self._client.upload_file(
-            str(source),
-            self._bucket,
-            self._key(file.id, file.kind),
-            ExtraArgs={
-                "ContentType": file.content_type,
-                # Les métadonnées S3 n'acceptent que l'ASCII : nom encodé.
-                "Metadata": {"filename": quote(file.filename)},
-            },
-        )
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO files (id, kind, filename, content_type, size, data)"
+                " VALUES (%s, %s, %s, %s, %s, %s)",
+                (
+                    file.id,
+                    file.kind,
+                    file.filename,
+                    file.content_type,
+                    file.size,
+                    source.read_bytes(),
+                ),
+            )
 
     def get(self, file_id: str, kind: str) -> Optional[StoredFile]:
-        from botocore.exceptions import ClientError
-
-        try:
-            head = self._client.head_object(
-                Bucket=self._bucket, Key=self._key(file_id, kind)
-            )
-        except ClientError as error:
-            code = error.response.get("Error", {}).get("Code")
-            if code in ("404", "NoSuchKey", "NotFound"):
-                return None
-            raise
-        return StoredFile(
-            id=file_id,
-            kind=kind,
-            filename=unquote(head.get("Metadata", {}).get("filename", file_id)),
-            content_type=head["ContentType"],
-            size=head["ContentLength"],
-        )
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT id, kind, filename, content_type, size FROM files"
+                " WHERE id = %s AND kind = %s",
+                (file_id, kind),
+            ).fetchone()
+        return StoredFile(*row) if row else None
 
     def open(self, file: StoredFile) -> Iterator[bytes]:
-        body = self._client.get_object(
-            Bucket=self._bucket, Key=self._key(file.id, file.kind)
-        )["Body"]
-        try:
-            yield from body.iter_chunks(CHUNK_SIZE)
-        finally:
-            body.close()
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT data FROM files WHERE id = %s AND kind = %s",
+                (file.id, file.kind),
+            ).fetchone()
+        data = memoryview(row[0]) if row else memoryview(b"")
+        for start in range(0, len(data), CHUNK_SIZE):
+            yield bytes(data[start : start + CHUNK_SIZE])
+
+    def total_bytes(self) -> int:
+        with self._connect() as db:
+            return db.execute("SELECT COALESCE(SUM(size), 0) FROM files").fetchone()[0]
 
 
 def create_store(settings: Settings) -> FileStore:
-    if settings.r2 is None:
+    if settings.database_url is None:
         return LocalFileStore(settings.data_dir)
-
-    import boto3
-
-    client = boto3.client(
-        "s3",
-        endpoint_url=settings.r2.endpoint_url,
-        aws_access_key_id=settings.r2.access_key_id,
-        aws_secret_access_key=settings.r2.secret_access_key,
-        region_name="auto",
-    )
-    return R2FileStore(client, settings.r2.bucket)
+    return PostgresFileStore(settings.database_url)

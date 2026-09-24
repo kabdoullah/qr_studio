@@ -117,6 +117,10 @@ def create_app(
                     out.write(chunk)
             if content_type is None:
                 raise HTTPException(400, "Le fichier est vide.")
+            if store.total_bytes() + size > settings.max_storage_bytes:
+                raise HTTPException(
+                    507, "L'espace de stockage est plein. Réessayez plus tard."
+                )
             store.save(
                 StoredFile(
                     id=file_id,

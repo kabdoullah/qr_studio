@@ -17,14 +17,15 @@ Erreurs : `411` (Content-Length absent), `413` (> 10 MB), `415` (mauvais
 format), `400` (fichier vide).
 
 Erreur `429` au-delà de 20 envois par heure et par adresse IP, ou de 300
-envois par heure pour tout le serveur (protège le quota de stockage).
+envois par heure pour tout le serveur. Erreur `507` quand l'espace total
+atteint la limite (400 MB par défaut, sous le quota gratuit de Neon).
 
 Le type est vérifié sur le **contenu** du fichier (signature), pas sur son
 nom. Les identifiants sont aléatoires (96 bits) : un lien ne se devine pas.
 
 Stockage :
-- **production** : Cloudflare R2 (objets `cv/<id>` et `card/<id>`, nom et
-  type stockés avec l'objet, aucune base de données) ;
+- **production** : PostgreSQL (Neon), fichiers et métadonnées dans la table
+  `files` (créée automatiquement) ;
 - **développement** : fichiers dans `data/files/`, métadonnées dans
   `data/qr_studio.sqlite3`.
 
@@ -41,6 +42,9 @@ python3 -m venv .venv
 ```bash
 .venv/bin/python -m pytest
 ```
+
+Les tests PostgreSQL démarrent un vrai serveur embarqué (`pgserver`) : ni
+Docker ni installation de PostgreSQL ne sont nécessaires.
 
 ## Lancer en local avec un téléphone
 
@@ -69,39 +73,39 @@ Android, réseau local sur iOS. En production, servez l'API en HTTPS.
 
 ## Variables d'environnement
 
-| Variable               | Défaut                                   | Rôle                                  |
-|------------------------|------------------------------------------|---------------------------------------|
-| `QR_STUDIO_PUBLIC_URL` | `RENDER_EXTERNAL_URL`, sinon `http://localhost:8000` | Base des liens encodés dans les QR |
-| `QR_STUDIO_DATA_DIR`   | `data`                                   | Stockage local (sans R2)              |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | — | Active le stockage R2 (les quatre ensemble) |
+| Variable                   | Défaut                                   | Rôle                                  |
+|----------------------------|------------------------------------------|---------------------------------------|
+| `DATABASE_URL`             | —                                        | Chaîne de connexion PostgreSQL (Neon) ; sans elle, stockage local |
+| `QR_STUDIO_PUBLIC_URL`     | `RENDER_EXTERNAL_URL`, sinon `http://localhost:8000` | Base des liens encodés dans les QR |
+| `QR_STUDIO_MAX_STORAGE_MB` | `400`                                    | Espace total autorisé pour les fichiers |
+| `QR_STUDIO_DATA_DIR`       | `data`                                   | Stockage local (sans base)            |
 
-Sur Render (`RENDER` défini), le serveur **refuse de démarrer sans R2** :
-le disque y est effacé à chaque déploiement, et les QR Codes déjà partagés
-pointeraient vers des fichiers disparus.
+Sur Render (`RENDER` défini), le serveur **refuse de démarrer sans
+`DATABASE_URL`** : le disque y est effacé à chaque déploiement, et les QR
+Codes déjà partagés pointeraient vers des fichiers disparus.
 
-## Déploiement sur Render + Cloudflare R2
+## Déploiement sur Render + Neon
 
-### 1. Cloudflare R2
+### 1. Neon (PostgreSQL gratuit, sans carte bancaire)
 
-1. Tableau de bord Cloudflare → **R2** → activer R2 (un moyen de paiement
-   peut être demandé, même pour rester dans l'offre gratuite).
-2. **Create bucket** : `qr-studio`. Laissez-le **privé** : c'est l'API qui
-   sert les fichiers.
-3. **Manage R2 API Tokens** → **Create API token** : permission
-   *Object Read & Write*, limitée au bucket `qr-studio`. Notez
-   l'**Access Key ID** et le **Secret Access Key** (affiché une seule fois).
-4. Notez l'**Account ID** (page d'accueil de R2).
+1. Créez un compte sur [neon.tech](https://neon.tech) (connexion GitHub
+   possible).
+2. **Create project** : nom `qr-studio`, région **AWS Europe Central 1
+   (Frankfurt)**, la même que le service Render.
+3. Sur le tableau de bord du projet, cliquez sur **Connect** et copiez la
+   chaîne de connexion (avec *Connection pooling* activé). Elle ressemble à
+   `postgresql://neondb_owner:…@ep-…-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
+
+La table `files` est créée automatiquement au premier démarrage.
 
 ### 2. Render
 
-Render déploie depuis un dépôt Git (GitHub, GitLab ou Bitbucket) contenant
-`render.yaml` à la racine.
+Render déploie depuis le dépôt GitHub, qui contient `render.yaml` à la
+racine.
 
-1. Poussez le projet sur GitHub.
-2. Render → **New** → **Blueprint** → choisissez le dépôt. Render lit
-   `render.yaml` et crée le service `qr-studio-api`.
-3. Saisissez les quatre variables `R2_*` quand Render les demande.
-4. Une fois déployé, vérifiez `https://<service>.onrender.com/health`.
+1. Render → **New** → **Blueprint** → choisissez le dépôt.
+2. Collez la chaîne Neon dans `DATABASE_URL` quand Render la demande.
+3. Une fois déployé, vérifiez `https://<service>.onrender.com/health`.
 
 ### 3. Application
 
@@ -109,12 +113,14 @@ Render déploie depuis un dépôt Git (GitHub, GitLab ou Bitbucket) contenant
 flutter build apk --dart-define=QR_STUDIO_API_URL=https://<service>.onrender.com
 ```
 
-### Limites de l'offre gratuite
+### Limites des offres gratuites
 
-- Le service s'**endort après 15 minutes** sans requête : le premier envoi
-  ou le premier scan qui suit attend environ une minute. Les envois de
-  l'application ont un délai de 2 minutes.
-- Pas de suppression ni d'expiration des fichiers pour l'instant.
+- **Neon** : environ 0,5 GB. Les fichiers sont limités à 400 MB au total
+  (quelques centaines de CV et d'images) ; au-delà, les envois sont refusés
+  (`507`). Pas de suppression ni d'expiration des fichiers pour l'instant.
+- **Render** : le service s'**endort après 15 minutes** sans requête ; le
+  premier envoi ou le premier scan qui suit attend environ une minute. Les
+  envois de l'application ont un délai de 2 minutes.
 - Les limites d'envoi sont en mémoire : elles repartent de zéro au
   redémarrage. La limite par adresse IP peut être contournée (adresse
   transmise par le proxy) ; la limite globale ne peut pas l'être.
