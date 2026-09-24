@@ -1,0 +1,24 @@
+# Déploiement du backend QR Studio sur Render (Blueprint).
+# Les fichiers sont stockés dans Cloudflare R2 : le disque de Render est
+# effacé à chaque déploiement, et le serveur refuse de démarrer sans R2.
+services:
+  - type: web
+    name: qr-studio-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      # Secrets à saisir dans le tableau de bord Render (jamais dans Git).
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
