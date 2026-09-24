@@ -1,8 +1,8 @@
 # QR Studio — backend
 
-Petit serveur FastAPI qui met en ligne les CV (PDF) et les images de carte
-de visite. L'application encode dans le QR Code le lien renvoyé ; la
-personne qui scanne ouvre le fichier dans son navigateur.
+Petit serveur FastAPI qui met en ligne les CV (PDF), les images de carte
+de visite et les pages de réseaux sociaux. L'application encode dans le QR
+Code le lien renvoyé ; la personne qui scanne l'ouvre dans son navigateur.
 
 | Méthode | Chemin            | Rôle                                              |
 |---------|-------------------|---------------------------------------------------|
@@ -12,6 +12,8 @@ personne qui scanne ouvre le fichier dans son navigateur.
 | GET     | `/card/{id}`      | Affiche l'image                                   |
 | POST    | `/api/v1/business-cards` | Publie les coordonnées d'une carte (JSON)  |
 | GET     | `/api/v1/business-cards?q=&limit=` | Liste/recherche, plus récentes d'abord (50 par défaut, 100 max) |
+| POST    | `/api/v1/social-pages` | Publie une page de réseaux sociaux (JSON)    |
+| GET     | `/s/{id}`         | Affiche la page de réseaux sociaux (HTML)         |
 | GET     | `/health`         | Vérification de disponibilité                     |
 
 Réponse d'envoi : `201 {"id": "...", "url": "https://.../cv/<id>"}`.
@@ -25,6 +27,18 @@ espaces ignorés) n'est pas enregistrée deux fois. La recherche porte sur le
 nom, la fonction, l'entreprise et la ville. Il n'existe pas de
 suppression : retirer une carte se fait directement dans la base
 (`DELETE FROM business_cards WHERE id = '…'`).
+**Pages de réseaux sociaux** : `{"title", "bio", "links": [{"network",
+"url"}]}` → `201 {"id", "url": "https://.../s/<id>"}`. Titre obligatoire
+(80 caractères maximum), description facultative (300), 1 à 10 liens.
+Réseaux : `instagram`, `tiktok`, `facebook`, `x`, `linkedin`, `youtube`,
+`snapchat`, `whatsapp`, `telegram`, `website`. Chaque adresse doit être en
+`https` (300 caractères maximum) et, sauf pour `website`, sur le domaine du
+réseau (un bouton « Instagram » ne mène qu'à Instagram) ; sinon `422`. La
+page n'est listée nulle part (lien seul, `noindex`), ne change jamais et
+n'a pas de suppression (`DELETE FROM social_pages WHERE id = '…'`). Un
+contenu identique renvoie la même page. Le HTML est généré par le serveur,
+sans JavaScript, avec une CSP stricte.
+
 Erreurs : `411` (Content-Length absent), `413` (> 10 MB), `415` (mauvais
 format), `400` (fichier vide).
 
@@ -36,8 +50,8 @@ Le type est vérifié sur le **contenu** du fichier (signature), pas sur son
 nom. Les identifiants sont aléatoires (96 bits) : un lien ne se devine pas.
 
 Stockage :
-- **production** : PostgreSQL (Neon), tables `files` et `business_cards`
-  (créées automatiquement) ;
+- **production** : PostgreSQL (Neon), tables `files`, `business_cards` et
+  `social_pages` (créées automatiquement) ;
 - **développement** : fichiers dans `data/files/`, métadonnées dans
   `data/qr_studio.sqlite3`.
 

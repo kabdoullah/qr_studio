@@ -7,9 +7,12 @@ import '../models/qr_code_data.dart';
 import '../models/qr_type.dart';
 import '../models/text_qr_data.dart';
 import '../models/shared_file.dart';
+import '../models/social_network.dart';
+import '../models/social_page_data.dart';
 import '../services/file_picker_service.dart';
 import '../services/file_storage_service.dart';
 import '../services/qr_service.dart';
+import '../services/social_page_service.dart';
 import 'qr_content_state.dart';
 import 'qr_generator_view_model.dart';
 
@@ -17,6 +20,14 @@ import 'qr_generator_view_model.dart';
 class QrContentViewModel extends Notifier<QrContentState> {
   static const String pickFailedMessage =
       'Impossible de sélectionner le fichier.\nVeuillez réessayer.';
+  static const String publishUnavailableMessage =
+      "La publication des pages n'est pas encore disponible.\n"
+      'Votre QR Code pourra être créé dès son ouverture.';
+  static const String publishFailedMessage =
+      'Impossible de publier la page.\n'
+      'Vérifiez votre connexion et réessayez.';
+  static const String publishTooManyMessage =
+      "Trop d'envois. Réessayez plus tard.";
 
   @override
   QrContentState build() => const QrContentState();
@@ -49,6 +60,46 @@ class QrContentViewModel extends Notifier<QrContentState> {
 
   void updateText(String text) {
     state = state.copyWith(text: TextQrData(text: text));
+  }
+
+  void updateSocialPage(SocialPageData Function(SocialPageData page) update) {
+    state = state.copyWith(socialPage: update(state.socialPage));
+  }
+
+  // Ajoute une ligne vide pour ce réseau (dans la limite autorisée).
+  void addSocialLink(SocialNetwork network) {
+    final links = state.socialPage.links;
+    if (links.length >= SocialPageData.maxLinks) return;
+    final id = links.fold(0, (max, l) => l.id > max ? l.id : max) + 1;
+    updateSocialPage(
+      (page) => page.copyWith(
+        links: [
+          ...links,
+          SocialLink(id: id, network: network),
+        ],
+      ),
+    );
+  }
+
+  void updateSocialLink(int id, String value) {
+    updateSocialPage(
+      (page) => page.copyWith(
+        links: [
+          for (final l in page.links) l.id == id ? l.withValue(value) : l,
+        ],
+      ),
+    );
+  }
+
+  void removeSocialLink(int id) {
+    updateSocialPage(
+      (page) => page.copyWith(
+        links: [
+          for (final l in page.links)
+            if (l.id != id) l,
+        ],
+      ),
+    );
   }
 
   Future<void> pickCv() => _pickFile(SharedFileKind.cv);
@@ -102,8 +153,12 @@ class QrContentViewModel extends Notifier<QrContentState> {
       _ => null,
     };
     final file = linkedKind == null ? null : await _upload(linkedKind);
+    final pageUrl = type == QrType.socialPage
+        ? await _publishSocialPage()
+        : null;
     final payload = switch (type) {
       _ when file != null => _qrService.generateLinkPayload(file.remoteUrl!),
+      _ when pageUrl != null => _qrService.generateLinkPayload(pageUrl),
       QrType.businessCard
           when linkedKind == null && state.isBusinessCardValid =>
         _qrService.generateBusinessCardPayload(state.businessCard),
@@ -163,6 +218,38 @@ class QrContentViewModel extends Notifier<QrContentState> {
       return null;
     }
   }
+
+  // Publie la page si elle est valide et renvoie son URL, ou `null` (le
+  // message d'erreur éventuel est alors placé dans l'état).
+  Future<String?> _publishSocialPage() async {
+    if (state.socialPagePublish.isPublishing || !state.isSocialPageValid) {
+      return null;
+    }
+    final service = ref.read(socialPageServiceProvider);
+    if (service == null) {
+      _setPublish(const PublishState(errorMessage: publishUnavailableMessage));
+      return null;
+    }
+
+    _setPublish(const PublishState(isPublishing: true));
+    try {
+      final url = await service.publish(state.socialPage);
+      _setPublish(const PublishState());
+      return url;
+    } catch (error, stackTrace) {
+      _log('Échec de la publication de la page', error, stackTrace);
+      final tooMany = error is SocialPageException && error.statusCode == 429;
+      _setPublish(
+        PublishState(
+          errorMessage: tooMany ? publishTooManyMessage : publishFailedMessage,
+        ),
+      );
+      return null;
+    }
+  }
+
+  void _setPublish(PublishState publish) =>
+      state = state.copyWith(socialPagePublish: publish);
 
   void _setFile(SharedFileKind kind, FileState file) =>
       state = state.withFileState(kind, file);
@@ -241,7 +328,8 @@ final livePreviewProvider = Provider<LivePreview?>((ref) {
         );
       }
       return fromPayload(service.generateBusinessCardPayload(card));
-    case QrType.cv || null:
+    // L'URL d'un fichier ou d'une page n'existe qu'après sa mise en ligne.
+    case QrType.cv || QrType.socialPage || null:
       return null;
   }
 });

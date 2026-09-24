@@ -7,15 +7,13 @@ dans l'application, qui prévient l'utilisateur.
 
 import hashlib
 import json
-import sqlite3
 import time
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field, field_validator
 
-from .config import Settings
+from .database import Database
 from .storage import new_file_id
 
 # Champs de la carte, dans l'ordre du formulaire de l'application.
@@ -71,11 +69,8 @@ class BusinessCardList(BaseModel):
 
 
 class CardStore:
-    """Même SQL pour SQLite (développement) et PostgreSQL (production)."""
-
-    def __init__(self, connect: Callable[[], Any], placeholder: str) -> None:
-        self._connect = connect
-        self._placeholder = placeholder
+    def __init__(self, db: Database) -> None:
+        self._execute = db.execute
         columns = ", ".join(f"{name} TEXT NOT NULL" for name in FIELDS)
         self._execute(
             "CREATE TABLE IF NOT EXISTS business_cards ("
@@ -85,12 +80,6 @@ class CardStore:
             " content_hash TEXT NOT NULL UNIQUE,"
             " created_at DOUBLE PRECISION NOT NULL)"
         )
-
-    def _execute(self, sql: str, params: Tuple = (), fetch: bool = False):
-        sql = sql.replace("%s", self._placeholder)
-        with self._connect() as db:
-            cursor = db.execute(sql, params)
-            return cursor.fetchall() if fetch else None
 
     @staticmethod
     def _hash(card: BusinessCardIn) -> str:
@@ -142,37 +131,6 @@ class CardStore:
 def _escape_like(term: str) -> str:
     # Les jokers saisis par l'utilisateur sont traités comme du texte.
     return term.replace("%", "").replace("_", "")
-
-
-def create_card_store(settings: Settings) -> CardStore:
-    if settings.database_url is None:
-        path = Path(settings.data_dir)
-        path.mkdir(parents=True, exist_ok=True)
-        return CardStore(
-            lambda: _sqlite(path / "qr_studio.sqlite3"), placeholder="?"
-        )
-
-    import psycopg
-
-    url = settings.database_url
-    return CardStore(
-        lambda: psycopg.connect(url, prepare_threshold=None), placeholder="%s"
-    )
-
-
-class _sqlite:
-    """Connexion SQLite fermée en fin de bloc (et validée si succès)."""
-
-    def __init__(self, path: Path) -> None:
-        self._db = sqlite3.connect(path)
-
-    def __enter__(self) -> sqlite3.Connection:
-        return self._db
-
-    def __exit__(self, exc_type, *_) -> None:
-        if exc_type is None:
-            self._db.commit()
-        self._db.close()
 
 
 def create_cards_router(store: CardStore) -> APIRouter:

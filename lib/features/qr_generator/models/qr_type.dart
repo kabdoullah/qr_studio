@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-// Types de contenu pris en charge par la V1, avec leur présentation.
+// Types de contenu pris en charge, avec leur présentation.
 enum QrType {
   businessCard(
     title: 'Carte de visite',
@@ -22,6 +22,13 @@ enum QrType {
     icon: Icons.notes_rounded,
     readyMessage: 'Votre QR Code est prêt 🎉',
     fileName: 'qr-code-texte.png',
+  ),
+  socialPage(
+    title: 'Réseaux sociaux',
+    description: 'Regroupez vos réseaux sur une page',
+    icon: Icons.hub_outlined,
+    readyMessage: 'Votre page est en ligne 🎉',
+    fileName: 'qr-code-reseaux-sociaux.png',
   );
 
   const QrType({

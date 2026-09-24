@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/utils/file_size_formatter.dart';
+import '../../../core/widgets/error_message.dart';
 import '../models/shared_file.dart';
 import '../viewmodels/qr_content_state.dart';
 import '../viewmodels/qr_content_view_model.dart';
@@ -95,7 +96,7 @@ class SharedFilePicker extends ConsumerWidget {
         ),
         if (fileState.errorMessage case final message?) ...[
           const SizedBox(height: 12),
-          _ErrorMessage(message),
+          ErrorMessage(message),
         ],
         const SizedBox(height: 16),
         Text(
@@ -331,43 +332,6 @@ class _ImageThumbnail extends StatelessWidget {
         fit: BoxFit.cover,
         excludeFromSemantics: true,
         errorBuilder: (context, error, stackTrace) => placeholder,
-      ),
-    );
-  }
-}
-
-class _ErrorMessage extends StatelessWidget {
-  const _ErrorMessage(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Semantics(
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: colors.errorContainer,
-          borderRadius: BorderRadius.circular(AppTheme.radius - 4),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.error_outline_rounded, color: colors.onErrorContainer),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colors.onErrorContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -10,6 +10,8 @@ import 'package:qr_studio/features/qr_generator/services/business_card_directory
 import 'package:qr_studio/features/qr_generator/services/file_picker_service.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_export_service.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_share_service.dart';
+import 'package:qr_studio/features/qr_generator/models/social_page_data.dart';
+import 'package:qr_studio/features/qr_generator/services/social_page_service.dart';
 
 // Sélecteur simulé : renvoie le résultat programmé, ou lève `error`.
 class FakeFilePickerService implements FilePickerService {
@@ -157,3 +159,21 @@ const jeanCard = SavedBusinessCard(
     company: 'Orange CI',
   ),
 );
+
+// Publication de page simulée : renvoie `url`, ou lève `error`.
+class FakeSocialPageService implements SocialPageService {
+  FakeSocialPageService({this.url = 'https://api.test/s/PagePagePagePag1'});
+
+  final String url;
+  Object? error;
+  Completer<void>? gate;
+  final List<SocialPageData> published = [];
+
+  @override
+  Future<String> publish(SocialPageData page) async {
+    await gate?.future;
+    if (error case final e?) throw e;
+    published.add(page);
+    return url;
+  }
+}

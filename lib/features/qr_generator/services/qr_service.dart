@@ -5,6 +5,7 @@ import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../models/business_card_data.dart';
 import '../models/qr_style.dart';
+import '../models/social_network.dart';
 import '../models/text_qr_data.dart';
 
 // Construit le contenu textuel (payload) encodé dans les QR Codes.
@@ -27,27 +28,30 @@ class QrService {
       ..._textLine('TITLE', data.jobTitle),
       ..._textLine('TEL;TYPE=CELL', data.phone),
       ..._textLine('EMAIL;TYPE=INTERNET', data.email),
-      ..._uriLine('URL', _normalizeUrl(data.website)),
+      ..._uriLine('URL', SocialNetwork.website.normalize(data.website)),
       if ([data.address, data.city, data.country].any(_isFilled))
         'ADR;TYPE=WORK:;;${_escape(data.address.trim())};'
             '${_escape(data.city.trim())};;;${_escape(data.country.trim())}',
       ..._uriLine(
         'URL;TYPE=LinkedIn',
-        _profileUrl(data.linkedin, 'https://www.linkedin.com/in/'),
+        SocialNetwork.linkedin.normalize(data.linkedin),
       ),
       ..._uriLine(
         'URL;TYPE=Instagram',
-        _profileUrl(data.instagram, 'https://www.instagram.com/'),
+        SocialNetwork.instagram.normalize(data.instagram),
       ),
-      ..._uriLine('URL;TYPE=WhatsApp', _whatsappUrl(data.whatsapp)),
+      ..._uriLine(
+        'URL;TYPE=WhatsApp',
+        SocialNetwork.whatsapp.normalize(data.whatsapp),
+      ),
       'END:VCARD',
     ];
     // La RFC 2426 impose des fins de ligne CRLF.
     return lines.join('\r\n');
   }
 
-  // Le QR Code d'un fichier partagé (CV, image de carte de visite) contient
-  // uniquement son URL publique.
+  // Le QR Code d'un contenu en ligne (CV, image de carte de visite, page de
+  // réseaux sociaux) contient uniquement son URL publique.
   String generateLinkPayload(String remoteUrl) => remoteUrl.trim();
 
   // Le texte est encodé tel quel, sans modification.
@@ -83,38 +87,6 @@ class QrService {
       .replaceAll(';', r'\;')
       .replaceAll(',', r'\,')
       .replaceAll(RegExp(r'\r\n|\r|\n'), r'\n');
-
-  static bool _hasScheme(String value) =>
-      RegExp(r'^[a-z][a-z0-9+.-]*://', caseSensitive: false).hasMatch(value);
-
-  // Ajoute « https:// » à une adresse saisie sans protocole.
-  static String? _normalizeUrl(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    return _hasScheme(trimmed) ? trimmed : 'https://$trimmed';
-  }
-
-  // Accepte un lien (avec ou sans protocole) ou un simple nom d'utilisateur.
-  // Un nom d'utilisateur peut contenir des points (« jean.dupont ») : seul
-  // un « / » indique qu'il s'agit d'un lien.
-  static String? _profileUrl(String value, String baseUrl) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    if (_hasScheme(trimmed) || trimmed.contains('/')) {
-      return _normalizeUrl(trimmed);
-    }
-    final handle = trimmed.startsWith('@') ? trimmed.substring(1) : trimmed;
-    return '$baseUrl${Uri.encodeComponent(handle)}';
-  }
-
-  // Transforme un numéro WhatsApp en lien wa.me (chiffres uniquement).
-  static String? _whatsappUrl(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    if (_hasScheme(trimmed)) return trimmed;
-    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
-    return digits.isEmpty ? null : 'https://wa.me/$digits';
-  }
 }
 
 final qrServiceProvider = Provider<QrService>((ref) => const QrService());

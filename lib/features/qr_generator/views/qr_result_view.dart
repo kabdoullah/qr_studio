@@ -52,8 +52,8 @@ class QrResultView extends ConsumerWidget {
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium,
                   ),
-                  // Lien encodé, pour un fichier partagé.
-                  if (result.file != null) ...[
+                  // Lien encodé, pour un contenu en ligne.
+                  if (result.isOnlineLink) ...[
                     const SizedBox(height: 4),
                     SelectableText(
                       result.payload,

@@ -18,4 +18,8 @@ class QrCodeData {
   // Fichier en ligne vers lequel pointe le QR Code (CV, image de carte de
   // visite), ou `null` si le contenu est encodé directement.
   final SharedFile? file;
+
+  // Le QR Code mène à une adresse en ligne (fichier ou page publiée) :
+  // le lien est alors affiché et joint au partage.
+  bool get isOnlineLink => file != null || type == QrType.socialPage;
 }

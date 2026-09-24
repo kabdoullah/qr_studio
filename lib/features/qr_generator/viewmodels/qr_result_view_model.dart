@@ -33,8 +33,8 @@ class QrResultViewModel extends Notifier<QrResultAction?> {
     });
   }
 
-  // Partage l'image PNG. Pour un fichier partagé (CV, image de carte), le
-  // lien accompagne l'image. Renvoie
+  // Partage l'image PNG. Pour un contenu en ligne (CV, image de carte,
+  // page de réseaux sociaux), le lien accompagne l'image. Renvoie
   // un message d'erreur, ou `null` si tout s'est bien passé.
   Future<String?> share(QrCodeData data, {Rect? origin}) {
     return _run(QrResultAction.share, shareFailedMessage, () async {
@@ -44,7 +44,7 @@ class QrResultViewModel extends Notifier<QrResultAction?> {
           .sharePng(
             png,
             fileName: data.type.fileName,
-            text: data.file != null ? data.payload : null,
+            text: data.isOnlineLink ? data.payload : null,
             origin: origin,
           );
       return null;

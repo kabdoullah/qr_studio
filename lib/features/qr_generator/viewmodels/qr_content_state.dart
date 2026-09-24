@@ -4,6 +4,8 @@ import '../models/business_card_data.dart';
 import '../models/qr_code_data.dart';
 import '../models/qr_type.dart';
 import '../models/shared_file.dart';
+import '../models/social_network.dart';
+import '../models/social_page_data.dart';
 import '../models/text_qr_data.dart';
 import '../services/qr_service.dart';
 
@@ -33,6 +35,15 @@ class FileState {
       FileState(status: status, file: file, errorMessage: message);
 }
 
+// Publication de la page de réseaux sociaux : en cours, ou message
+// d'erreur de la dernière tentative.
+class PublishState {
+  const PublishState({this.isPublishing = false, this.errorMessage});
+
+  final bool isPublishing;
+  final String? errorMessage;
+}
+
 // Contenu de la carte de visite : coordonnées encodées en vCard, ou image
 // de la carte partagée par lien.
 enum BusinessCardMode { details, image }
@@ -47,6 +58,8 @@ class QrContentState {
     this.text = const TextQrData(),
     this.cv = const FileState(),
     this.cardImage = const FileState(),
+    this.socialPage = const SocialPageData(),
+    this.socialPagePublish = const PublishState(),
     this.showErrorsFor = const {},
     this.failedGenerations = 0,
     this.result,
@@ -61,6 +74,8 @@ class QrContentState {
   final TextQrData text;
   final FileState cv;
   final FileState cardImage;
+  final SocialPageData socialPage;
+  final PublishState socialPagePublish;
 
   // Types pour lesquels une génération a échoué : leurs erreurs
   // s'affichent toutes, y compris sur les champs jamais touchés. Les autres
@@ -109,6 +124,37 @@ class QrContentState {
     return null;
   }
 
+  static String? validateSocialTitle(String value) {
+    if (value.trim().isEmpty) return 'Veuillez saisir un titre.';
+    if (value.trim().length > SocialPageData.maxTitleLength) {
+      return 'Le titre ne doit pas dépasser '
+          '${SocialPageData.maxTitleLength} caractères.';
+    }
+    return null;
+  }
+
+  static String? validateSocialBio(String value) =>
+      value.trim().length > SocialPageData.maxBioLength
+      ? 'La description ne doit pas dépasser '
+            '${SocialPageData.maxBioLength} caractères.'
+      : null;
+
+  static String? validateSocialLink(SocialNetwork network, String value) {
+    if (value.trim().isEmpty) return 'Veuillez compléter ce lien.';
+    return network.toUrl(value) == null ? network.invalidMessage : null;
+  }
+
+  static String? validateSocialLinks(List<SocialLink> links) =>
+      links.isEmpty ? 'Ajoutez au moins un réseau.' : null;
+
+  static bool isValidSocialPage(SocialPageData page) =>
+      validateSocialTitle(page.title) == null &&
+      validateSocialBio(page.bio) == null &&
+      validateSocialLinks(page.links) == null &&
+      page.links.every((l) => validateSocialLink(l.network, l.value) == null);
+
+  bool get isSocialPageValid => isValidSocialPage(socialPage);
+
   bool get isTextValid => validateText(text.text) == null;
 
   static bool isValidBusinessCard(BusinessCardData card) =>
@@ -125,6 +171,8 @@ class QrContentState {
     TextQrData? text,
     FileState? cv,
     FileState? cardImage,
+    SocialPageData? socialPage,
+    PublishState? socialPagePublish,
     Set<QrType>? showErrorsFor,
     int? failedGenerations,
     QrCodeData? result,
@@ -136,6 +184,8 @@ class QrContentState {
       text: text ?? this.text,
       cv: cv ?? this.cv,
       cardImage: cardImage ?? this.cardImage,
+      socialPage: socialPage ?? this.socialPage,
+      socialPagePublish: socialPagePublish ?? this.socialPagePublish,
       showErrorsFor: showErrorsFor ?? this.showErrorsFor,
       failedGenerations: failedGenerations ?? this.failedGenerations,
       result: result ?? this.result,

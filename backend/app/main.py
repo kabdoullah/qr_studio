@@ -1,4 +1,5 @@
-"""API de QR Studio : mise en ligne des CV et des images de carte de visite.
+"""API de QR Studio : mise en ligne des CV et des images de carte de visite,
+cartes de visite partagées et pages de réseaux sociaux.
 
 Le QR Code généré par l'application contient l'URL renvoyée ici ; la
 personne qui le scanne ouvre directement le fichier dans son navigateur.
@@ -17,10 +18,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .cards import CardStore, create_card_store, create_cards_router
+from .cards import CardStore, create_cards_router
 from .config import Settings
+from .database import create_database
 from .rate_limit import UploadRateLimiter
+from .social_pages import SocialPageStore, create_social_pages_router
 from .storage import CHUNK_SIZE, FileStore, StoredFile, create_store, new_file_id
+
 # Marge pour l'enveloppe multipart (en-têtes, séparateurs).
 _MULTIPART_OVERHEAD = 64 * 1024
 _ID_PATTERN = r"^[A-Za-z0-9_-]{16}$"
@@ -68,10 +72,13 @@ def create_app(
     settings: Optional[Settings] = None,
     store: Optional[FileStore] = None,
     card_store: Optional[CardStore] = None,
+    page_store: Optional[SocialPageStore] = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or create_store(settings)
-    card_store = card_store or create_card_store(settings)
+    database = create_database(settings)
+    card_store = card_store or CardStore(database)
+    page_store = page_store or SocialPageStore(database)
     limiter = UploadRateLimiter(
         per_client=settings.uploads_per_client_per_hour,
         total=settings.uploads_per_hour,
@@ -171,6 +178,7 @@ def create_app(
         )
 
     app.include_router(create_cards_router(card_store))
+    app.include_router(create_social_pages_router(page_store, settings.public_url))
 
     @app.get("/health")
     def health() -> Dict[str, str]:
