@@ -30,11 +30,15 @@ services:
   - type: web
     name: qr-studio-web
     runtime: static
-    # Render ne fournit pas Flutter : la version du projet est installée à
-    # chaque build.
+    # Render ne fournit pas Flutter : la version du projet est installée
+    # dans $HOME/flutter, que le cache de build de Render conserve. Elle est
+    # réutilisée si c'est la bonne version, sinon réinstallée.
     buildCommand: >-
+      if [ "$(git -C "$HOME/flutter" describe --tags --exact-match 2>/dev/null)"
+      != "$FLUTTER_VERSION" ]; then
+      rm -rf "$HOME/flutter" &&
       git clone --depth 1 --branch "$FLUTTER_VERSION"
-      https://github.com/flutter/flutter.git "$HOME/flutter" &&
+      https://github.com/flutter/flutter.git "$HOME/flutter"; fi &&
       "$HOME/flutter/bin/flutter" build web --release
       --dart-define=QR_STUDIO_API_URL="$QR_STUDIO_API_URL"
     staticPublishPath: build/web
