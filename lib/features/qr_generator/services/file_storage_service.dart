@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../core/constants/api_config.dart';
 import '../models/shared_file.dart';
 
 // Met un fichier en ligne et renvoie l'URL publique encodée dans le QR Code.
@@ -48,10 +49,8 @@ class FileUploadException implements Exception {
 // - image de carte de visite : `POST /api/v1/cards` ;
 // réponse `201 { "id": "...", "url": "..." }`.
 final class HttpFileStorageService implements FileStorageService {
-  HttpFileStorageService(Uri baseUrl, {http.Client? client})
-    : _baseUrl = baseUrl.path.endsWith('/')
-          ? baseUrl
-          : baseUrl.replace(path: '${baseUrl.path}/'),
+  HttpFileStorageService(String baseUrl, {http.Client? client})
+    : _baseUrl = apiBaseUri(baseUrl),
       _client = client ?? http.Client();
 
   // Un fichier de 10 MB sur une connexion mobile lente.
@@ -96,11 +95,7 @@ final class HttpFileStorageService implements FileStorageService {
   }
 }
 
-// Adresse du backend, fournie au lancement :
-// `flutter run --dart-define=QR_STUDIO_API_URL=http://192.168.1.10:8000`.
-const String _apiUrl = String.fromEnvironment('QR_STUDIO_API_URL');
-
 final fileStorageServiceProvider = Provider<FileStorageService>((ref) {
-  if (_apiUrl.isEmpty) return const BackendRequiredFileStorageService();
-  return HttpFileStorageService(Uri.parse(_apiUrl));
+  if (apiBaseUrl.isEmpty) return const BackendRequiredFileStorageService();
+  return HttpFileStorageService(apiBaseUrl);
 });

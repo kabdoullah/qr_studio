@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Path, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from .cards import CardStore, create_card_store, create_cards_router
 from .config import Settings
 from .rate_limit import UploadRateLimiter
 from .storage import CHUNK_SIZE, FileStore, StoredFile, create_store, new_file_id
@@ -65,9 +66,11 @@ def _safe_filename(name: Optional[str], fallback: str) -> str:
 def create_app(
     settings: Optional[Settings] = None,
     store: Optional[FileStore] = None,
+    card_store: Optional[CardStore] = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or create_store(settings)
+    card_store = card_store or create_card_store(settings)
     limiter = UploadRateLimiter(
         per_client=settings.uploads_per_client_per_hour,
         total=settings.uploads_per_hour,
@@ -153,6 +156,8 @@ def create_app(
                 "Cache-Control": "public, max-age=86400, immutable",
             },
         )
+
+    app.include_router(create_cards_router(card_store))
 
     @app.get("/health")
     def health() -> Dict[str, str]:

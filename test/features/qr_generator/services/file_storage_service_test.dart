@@ -30,7 +30,7 @@ void main() {
       requests.add(request);
       return http.Response(jsonEncode(body), status);
     });
-    return HttpFileStorageService(Uri.parse(baseUrl), client: client);
+    return HttpFileStorageService(baseUrl, client: client);
   }
 
   test('envoie le CV et renvoie le lien public', () async {

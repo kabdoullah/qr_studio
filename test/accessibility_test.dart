@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/app/app.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/models/shared_file.dart';
+import 'package:qr_studio/features/qr_generator/services/business_card_directory_service.dart';
 import 'package:qr_studio/features/qr_generator/services/file_storage_service.dart';
 import 'package:qr_studio/features/qr_generator/services/file_picker_service.dart';
 
@@ -28,6 +29,9 @@ void main() {
           filePickerServiceProvider.overrideWithValue(picker),
           fileStorageServiceProvider.overrideWithValue(
             FakeFileStorageService(),
+          ),
+          businessCardDirectoryProvider.overrideWithValue(
+            FakeBusinessCardDirectory([jeanCard, awaCard]),
           ),
         ],
         child: const QrStudioApp(),
@@ -67,6 +71,18 @@ void main() {
         await pumpApp(tester);
         await open(tester, QrType.businessCard);
         await tester.tap(find.text('Générer le QR Code'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+        handle.dispose();
+      });
+
+      testWidgets('cartes enregistrées', (tester) async {
+        final handle = tester.ensureSemantics();
+        await pumpApp(tester);
+        await open(tester, QrType.businessCard);
+        await expectAccessible(tester);
+
+        await tester.tap(find.text('Choisir une carte enregistrée'));
         await tester.pumpAndSettle();
         await expectAccessible(tester);
         handle.dispose();

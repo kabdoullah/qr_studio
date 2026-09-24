@@ -10,9 +10,21 @@ personne qui scanne ouvre le fichier dans son navigateur.
 | POST    | `/api/v1/cards`   | Envoi d'une image JPEG, PNG ou WebP (`file`)      |
 | GET     | `/cv/{id}`        | Affiche le PDF                                    |
 | GET     | `/card/{id}`      | Affiche l'image                                   |
+| POST    | `/api/v1/business-cards` | Publie les coordonnées d'une carte (JSON)  |
+| GET     | `/api/v1/business-cards?q=&limit=` | Liste/recherche, plus récentes d'abord (50 par défaut, 100 max) |
 | GET     | `/health`         | Vérification de disponibilité                     |
 
 Réponse d'envoi : `201 {"id": "...", "url": "https://.../cv/<id>"}`.
+
+**Cartes partagées** : les coordonnées publiées sont **visibles par tous
+les utilisateurs** (annuaire public, sans compte). Champs `first_name`,
+`last_name` (obligatoires), `job_title`, `company`, `phone`, `email`,
+`website`, `address`, `city`, `country`, `linkedin`, `instagram`,
+`whatsapp` (200 caractères maximum chacun). Une carte identique (casse et
+espaces ignorés) n'est pas enregistrée deux fois. La recherche porte sur le
+nom, la fonction, l'entreprise et la ville. Il n'existe pas de
+suppression : retirer une carte se fait directement dans la base
+(`DELETE FROM business_cards WHERE id = '…'`).
 Erreurs : `411` (Content-Length absent), `413` (> 10 MB), `415` (mauvais
 format), `400` (fichier vide).
 
@@ -24,8 +36,8 @@ Le type est vérifié sur le **contenu** du fichier (signature), pas sur son
 nom. Les identifiants sont aléatoires (96 bits) : un lien ne se devine pas.
 
 Stockage :
-- **production** : PostgreSQL (Neon), fichiers et métadonnées dans la table
-  `files` (créée automatiquement) ;
+- **production** : PostgreSQL (Neon), tables `files` et `business_cards`
+  (créées automatiquement) ;
 - **développement** : fichiers dans `data/files/`, métadonnées dans
   `data/qr_studio.sqlite3`.
 

@@ -31,6 +31,16 @@ class QrContentViewModel extends Notifier<QrContentState> {
     state = state.copyWith(businessCard: update(state.businessCard));
   }
 
+  // Remplace la saisie par une carte enregistrée.
+  void loadBusinessCard(BusinessCardData card) {
+    state = state.copyWith(
+      businessCard: card,
+      businessCardMode: BusinessCardMode.details,
+      businessCardRevision: state.businessCardRevision + 1,
+      showErrorsFor: {...state.showErrorsFor}..remove(QrType.businessCard),
+    );
+  }
+
   // Bascule entre les coordonnées et l'image de la carte. La saisie de
   // l'autre mode est conservée.
   void setBusinessCardMode(BusinessCardMode mode) {

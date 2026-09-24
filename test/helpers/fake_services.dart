@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:qr_studio/features/qr_generator/models/shared_file.dart';
+import 'package:qr_studio/features/qr_generator/models/business_card_data.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_code_data.dart';
 import 'package:qr_studio/features/qr_generator/services/file_storage_service.dart';
+import 'package:qr_studio/features/qr_generator/services/business_card_directory_service.dart';
 import 'package:qr_studio/features/qr_generator/services/file_picker_service.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_export_service.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_share_service.dart';
@@ -97,3 +99,61 @@ class FakeQrShareService implements QrShareService {
     return saveAccepted;
   }
 }
+
+// Annuaire de cartes simulé : recherche simple sur le nom et l'entreprise.
+class FakeBusinessCardDirectory implements BusinessCardDirectoryService {
+  FakeBusinessCardDirectory([List<SavedBusinessCard>? cards])
+    : cards = cards ?? [];
+
+  final List<SavedBusinessCard> cards;
+  final List<String> queries = [];
+  final List<BusinessCardData> published = [];
+  Object? error;
+  Completer<void>? gate;
+
+  @override
+  Future<List<SavedBusinessCard>> search(String query) async {
+    queries.add(query);
+    await gate?.future;
+    if (error case final e?) throw e;
+    final q = query.toLowerCase();
+    return cards
+        .where(
+          (c) => '${c.data.firstName} ${c.data.lastName} ${c.data.company}'
+              .toLowerCase()
+              .contains(q),
+        )
+        .toList();
+  }
+
+  @override
+  Future<SavedBusinessCard> publish(BusinessCardData card) async {
+    await gate?.future;
+    if (error case final e?) throw e;
+    published.add(card);
+    final saved = SavedBusinessCard(id: 'id${published.length}', data: card);
+    cards.insert(0, saved);
+    return saved;
+  }
+}
+
+const awaCard = SavedBusinessCard(
+  id: 'AwaAwaAwaAwaAwa1',
+  data: BusinessCardData(
+    firstName: 'Awa',
+    lastName: 'Traoré',
+    jobTitle: 'Designer',
+    company: 'Studio Lagune',
+    email: 'awa@example.com',
+    city: 'Abidjan',
+  ),
+);
+
+const jeanCard = SavedBusinessCard(
+  id: 'JeanJeanJeanJea1',
+  data: BusinessCardData(
+    firstName: 'Jean',
+    lastName: 'Kouassi',
+    company: 'Orange CI',
+  ),
+);

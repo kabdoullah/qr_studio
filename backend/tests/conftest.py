@@ -20,5 +20,5 @@ def database_url(postgres_server):
 
     url = postgres_server.get_uri()
     with psycopg.connect(url, autocommit=True) as db:
-        db.execute("DROP TABLE IF EXISTS files")
+        db.execute("DROP TABLE IF EXISTS files, business_cards")
     return url

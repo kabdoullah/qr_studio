@@ -62,3 +62,11 @@ class BusinessCardData {
     );
   }
 }
+
+// Carte publiée dans l'annuaire partagé, visible par tous les utilisateurs.
+class SavedBusinessCard {
+  const SavedBusinessCard({required this.id, required this.data});
+
+  final String id;
+  final BusinessCardData data;
+}

@@ -43,6 +43,7 @@ class QrContentState {
   const QrContentState({
     this.businessCard = const BusinessCardData(),
     this.businessCardMode = BusinessCardMode.details,
+    this.businessCardRevision = 0,
     this.text = const TextQrData(),
     this.cv = const FileState(),
     this.cardImage = const FileState(),
@@ -52,6 +53,10 @@ class QrContentState {
 
   final BusinessCardData businessCard;
   final BusinessCardMode businessCardMode;
+
+  // Incrémenté quand une carte enregistrée remplace la saisie : le
+  // formulaire est alors reconstruit avec les nouvelles valeurs.
+  final int businessCardRevision;
   final TextQrData text;
   final FileState cv;
   final FileState cardImage;
@@ -111,6 +116,7 @@ class QrContentState {
   QrContentState copyWith({
     BusinessCardData? businessCard,
     BusinessCardMode? businessCardMode,
+    int? businessCardRevision,
     TextQrData? text,
     FileState? cv,
     FileState? cardImage,
@@ -120,6 +126,7 @@ class QrContentState {
     return QrContentState(
       businessCard: businessCard ?? this.businessCard,
       businessCardMode: businessCardMode ?? this.businessCardMode,
+      businessCardRevision: businessCardRevision ?? this.businessCardRevision,
       text: text ?? this.text,
       cv: cv ?? this.cv,
       cardImage: cardImage ?? this.cardImage,

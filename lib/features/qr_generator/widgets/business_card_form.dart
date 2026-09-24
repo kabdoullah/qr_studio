@@ -25,7 +25,13 @@ class BusinessCardForm extends ConsumerWidget {
     void update(BusinessCardData Function(BusinessCardData) change) =>
         viewModel.updateBusinessCard(change);
 
+    final revision = ref.watch(
+      qrContentViewModelProvider.select((s) => s.businessCardRevision),
+    );
+
     return Form(
+      // Nouvelle clé : les champs sont recréés avec la carte chargée.
+      key: ValueKey(revision),
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
           : AutovalidateMode.onUserInteraction,
