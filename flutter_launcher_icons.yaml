@@ -1,0 +1,17 @@
+# Icône de l'application. Régénérer après modification :
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  ios: true
+  # iOS applique son propre masque arrondi : image pleine, sans transparence.
+  image_path_ios: "assets/branding/icon_ios.png"
+  remove_alpha_ios: true
+  android: "ic_launcher"
+  # Anciennes versions d'Android : logo déjà arrondi.
+  image_path_android: "assets/branding/icon_rounded.png"
+  # Icône adaptative (Android 8+) : dessin réduit dans la zone sûre, dégradé
+  # prolongé jusqu'aux bords du calque.
+  adaptive_icon_foreground: "assets/branding/icon_android_foreground.png"
+  adaptive_icon_background: "#19068C"
+  # L'image occupe déjà tout le calque : pas de marge supplémentaire.
+  adaptive_icon_foreground_inset: 0
+  min_sdk_android: 21

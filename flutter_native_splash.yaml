@@ -1,0 +1,13 @@
+# Écran de lancement natif. Régénérer après modification :
+#   dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#FFFFFF"
+  color_dark: "#121318"
+  image: "assets/branding/splash_logo.png"
+  # Android 12+ : l'écran système affiche l'icône dans un cercle.
+  android_12:
+    image: "assets/branding/icon_android_foreground.png"
+    color: "#FFFFFF"
+    color_dark: "#121318"
+  fullscreen: false
+  web: false
