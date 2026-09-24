@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -27,6 +27,19 @@ class QrShareService {
     String? text,
     Rect? origin,
   }) async {
+    // Sur le web, pas de système de fichiers : l'image est partagée depuis
+    // la mémoire (Web Share API, feuille de partage d'iOS).
+    if (kIsWeb) {
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile.fromData(png, name: fileName, mimeType: _mimeType)],
+          fileNameOverrides: [fileName],
+          text: text,
+        ),
+      );
+      return;
+    }
+
     final directory = _shareDirectory;
     if (directory.existsSync()) await directory.delete(recursive: true);
     await directory.create(recursive: true);
@@ -44,14 +57,15 @@ class QrShareService {
   }
 
   // Ouvre la boîte « Enregistrer sous » du système. Renvoie `false` si
-  // l'utilisateur annule.
+  // l'utilisateur annule. Sur le web, le navigateur télécharge l'image
+  // directement, sans possibilité d'annuler.
   Future<bool> savePng(Uint8List png, {required String fileName}) async {
     final uri = await FilePicker.saveFile(
       fileName: fileName,
       bytes: png,
       mimeType: _mimeType,
     );
-    return uri != null;
+    return kIsWeb || uri != null;
   }
 }
 

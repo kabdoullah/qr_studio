@@ -10,4 +10,5 @@ flutter_native_splash:
     color: "#FFFFFF"
     color_dark: "#121318"
   fullscreen: false
-  web: false
+  # PWA : affiché pendant le chargement de Flutter dans le navigateur.
+  web: true

@@ -1,10 +1,12 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/shared_file.dart';
 
 // Sélection de fichiers sur l'appareil via le sélecteur natif. Renvoie
-// `null` si l'utilisateur annule. Le contenu n'est pas chargé en mémoire.
+// `null` si l'utilisateur annule. Le contenu n'est pas chargé en mémoire,
+// sauf sur le web où il n'existe pas de chemin local.
 class FilePickerService {
   const FilePickerService();
 
@@ -35,7 +37,17 @@ class FilePickerService {
     if (size == null) {
       throw StateError('Taille du fichier « ${file.name} » inconnue.');
     }
-    return SharedFile(name: file.name, size: size, localPath: file.path);
+    // Sur le web, le contenu est lu tout de suite, sauf si le fichier
+    // dépasse la limite : il sera refusé à la validation.
+    final bytes = kIsWeb && size <= SharedFileKind.maxSizeBytes
+        ? await file.readAsBytes()
+        : null;
+    return SharedFile(
+      name: file.name,
+      size: size,
+      localPath: file.path,
+      bytes: bytes,
+    );
   }
 }
 

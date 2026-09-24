@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 // Types de fichiers partagés par lien : le fichier est mis en ligne et le
 // QR Code contient son URL (un fichier est bien trop lourd pour y tenir).
 enum SharedFileKind {
@@ -59,6 +61,7 @@ class SharedFile {
     required this.name,
     required this.size,
     this.localPath,
+    this.bytes,
     this.remoteUrl,
   });
 
@@ -69,9 +72,18 @@ class SharedFile {
 
   final String? localPath;
 
+  // Contenu du fichier, seulement sur le web : un navigateur ne donne pas
+  // de chemin sur le disque.
+  final Uint8List? bytes;
+
   // URL publique renvoyée par le backend après l'envoi.
   final String? remoteUrl;
 
-  SharedFile withRemoteUrl(String url) =>
-      SharedFile(name: name, size: size, localPath: localPath, remoteUrl: url);
+  SharedFile withRemoteUrl(String url) => SharedFile(
+    name: name,
+    size: size,
+    localPath: localPath,
+    bytes: bytes,
+    remoteUrl: url,
+  );
 }

@@ -91,6 +91,7 @@ Android, réseau local sur iOS. En production, servez l'API en HTTPS.
 | `QR_STUDIO_PUBLIC_URL`     | `RENDER_EXTERNAL_URL`, sinon `http://localhost:8000` | Base des liens encodés dans les QR |
 | `QR_STUDIO_MAX_STORAGE_MB` | `400`                                    | Espace total autorisé pour les fichiers |
 | `QR_STUDIO_DATA_DIR`       | `data`                                   | Stockage local (sans base)            |
+| `QR_STUDIO_CORS_ORIGINS`   | vide                                     | Origines web autorisées (PWA), séparées par des virgules |
 
 Sur Render (`RENDER` défini), le serveur **refuse de démarrer sans
 `DATABASE_URL`** : le disque y est effacé à chaque déploiement, et les QR

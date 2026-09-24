@@ -211,7 +211,7 @@ class _SelectedCard extends StatelessWidget {
               children: [
                 switch (kind) {
                   SharedFileKind.businessCardImage => _ImageThumbnail(
-                    path: file.localPath,
+                    file: file,
                     fallback: copy.icon,
                   ),
                   SharedFileKind.cv => _FileIcon(size: 40, icon: copy.icon),
@@ -300,28 +300,35 @@ class _FileIcon extends StatelessWidget {
 // Miniature de l'image choisie, décodée en basse résolution pour ne pas
 // charger la photo entière en mémoire.
 class _ImageThumbnail extends StatelessWidget {
-  const _ImageThumbnail({required this.path, required this.fallback});
+  const _ImageThumbnail({required this.file, required this.fallback});
 
   static const double _size = 64;
 
-  final String? path;
+  final SharedFile file;
   final IconData fallback;
 
   @override
   Widget build(BuildContext context) {
-    final path = this.path;
     final placeholder = _FileIcon(size: _size, icon: fallback);
-    if (path == null) return placeholder;
+    // Sur le web, l'image est en mémoire ; sur mobile, elle est lue sur le
+    // disque.
+    final bytes = file.bytes;
+    final path = file.localPath;
+    final ImageProvider? image = bytes != null
+        ? MemoryImage(bytes)
+        : path != null
+        ? FileImage(File(path))
+        : null;
+    if (image == null) return placeholder;
 
     final pixels = (_size * MediaQuery.devicePixelRatioOf(context)).round();
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppTheme.radius - 4),
-      child: Image.file(
-        File(path),
+      child: Image(
+        image: ResizeImage(image, width: pixels),
         width: _size,
         height: _size,
         fit: BoxFit.cover,
-        cacheWidth: pixels,
         excludeFromSemantics: true,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),

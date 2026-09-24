@@ -143,6 +143,7 @@ def clean_env(monkeypatch):
         "RENDER_EXTERNAL_URL",
         "QR_STUDIO_PUBLIC_URL",
         "QR_STUDIO_MAX_STORAGE_MB",
+        "QR_STUDIO_CORS_ORIGINS",
     ]:
         monkeypatch.delenv(key, raising=False)
     return monkeypatch
@@ -174,6 +175,19 @@ def test_public_url_can_be_overridden(clean_env):
     clean_env.setenv("QR_STUDIO_PUBLIC_URL", "https://api.qrstudio.app")
 
     assert Settings.from_env().public_url == "https://api.qrstudio.app"
+
+
+def test_cors_origins_from_env(clean_env):
+    assert Settings.from_env().cors_origins == ()
+
+    clean_env.setenv(
+        "QR_STUDIO_CORS_ORIGINS", " https://qr-studio.onrender.com/ , http://localhost:8080"
+    )
+
+    assert Settings.from_env().cors_origins == (
+        "https://qr-studio.onrender.com",
+        "http://localhost:8080",
+    )
 
 
 def test_create_store_uses_postgres_when_configured(tmp_path, database_url):

@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 _MB = 1024 * 1024
 
@@ -26,6 +26,10 @@ class Settings:
     # Limites d'envoi par heure : par adresse IP, et pour tout le serveur.
     uploads_per_client_per_hour: int = 20
     uploads_per_hour: int = 300
+    # Origines autorisées à appeler l'API depuis un navigateur (CORS), par
+    # exemple la PWA. Vide : aucun appel depuis une page web d'un autre
+    # domaine (l'application mobile n'est pas concernée).
+    cors_origins: Tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -52,4 +56,9 @@ class Settings:
             data_dir=Path(env.get("QR_STUDIO_DATA_DIR", "data")),
             database_url=database_url,
             max_storage_bytes=int(env.get("QR_STUDIO_MAX_STORAGE_MB", "400")) * _MB,
+            cors_origins=tuple(
+                origin.strip().rstrip("/")
+                for origin in env.get("QR_STUDIO_CORS_ORIGINS", "").split(",")
+                if origin.strip()
+            ),
         )

@@ -133,3 +133,65 @@ def test_filename_is_sanitized(client):
 
     assert "x-injected" not in response.headers
     assert ".." not in response.headers["content-disposition"].split("filename")[-1][:5]
+
+
+PWA = "https://pwa.qrstudio.test"
+
+
+def cors_client(tmp_path, **values):
+    settings = Settings(
+        public_url="https://qrstudio.test",
+        data_dir=tmp_path,
+        max_file_bytes=100 * 1024,
+        cors_origins=(PWA,),
+        **values,
+    )
+    return TestClient(create_app(settings))
+
+
+def test_cors_preflight_allows_the_pwa(tmp_path):
+    response = cors_client(tmp_path).options(
+        "/api/v1/cvs",
+        headers={"Origin": PWA, "Access-Control-Request-Method": "POST"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == PWA
+
+
+def test_cors_upload_from_the_pwa(tmp_path):
+    client = cors_client(tmp_path)
+    response = client.post(
+        "/api/v1/cvs", files={"file": ("cv.pdf", PDF)}, headers={"Origin": PWA}
+    )
+
+    assert response.status_code == 201
+    assert response.headers["access-control-allow-origin"] == PWA
+
+
+def test_cors_headers_on_rate_limited_upload(tmp_path):
+    client = cors_client(tmp_path, uploads_per_client_per_hour=0)
+    response = client.post(
+        "/api/v1/cvs", files={"file": ("cv.pdf", PDF)}, headers={"Origin": PWA}
+    )
+
+    assert response.status_code == 429
+    assert response.headers["access-control-allow-origin"] == PWA
+
+
+def test_cors_refuses_other_origins(tmp_path):
+    response = cors_client(tmp_path).options(
+        "/api/v1/cvs",
+        headers={
+            "Origin": "https://evil.test",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_no_cors_by_default(client):
+    response = client.get("/health", headers={"Origin": PWA})
+
+    assert "access-control-allow-origin" not in response.headers

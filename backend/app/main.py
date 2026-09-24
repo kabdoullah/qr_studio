@@ -13,6 +13,7 @@ from typing import Callable, Dict, Optional
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Path, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -98,6 +99,18 @@ def create_app(
                     status_code=429,
                 )
         return await call_next(request)
+
+    # Ajouté après la limite de taille, donc exécuté avant : les refus
+    # (411, 413, 429) portent aussi les en-têtes CORS, et le navigateur peut
+    # lire leur statut.
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+            max_age=3600,
+        )
 
     async def _store_upload(upload: UploadFile, kind: str) -> UploadResponse:
         file_id = new_file_id()

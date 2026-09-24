@@ -19,3 +19,39 @@ services:
       # (jamais dans Git).
       - key: DATABASE_URL
         sync: false
+      # Adresse de la PWA (ex. https://qr-studio-web.onrender.com), autorisée
+      # à appeler l'API depuis le navigateur. À saisir dans le tableau de bord.
+      - key: QR_STUDIO_CORS_ORIGINS
+        sync: false
+
+  # PWA (Flutter web), pour les utilisateurs iOS : ouverte dans Safari puis
+  # « Partager › Sur l'écran d'accueil ». Site statique servi par le CDN de
+  # Render, qui ne s'endort pas.
+  - type: web
+    name: qr-studio-web
+    runtime: static
+    # Render ne fournit pas Flutter : la version du projet est installée à
+    # chaque build.
+    buildCommand: >-
+      git clone --depth 1 --branch "$FLUTTER_VERSION"
+      https://github.com/flutter/flutter.git "$HOME/flutter" &&
+      "$HOME/flutter/bin/flutter" build web --release
+      --dart-define=QR_STUDIO_API_URL="$QR_STUDIO_API_URL"
+    staticPublishPath: build/web
+    # Le backend n'influe pas sur la PWA : pas de rebuild pour lui.
+    buildFilter:
+      ignoredPaths:
+        - backend/**
+        - android/**
+        - ios/**
+    headers:
+      # Fichiers d'entrée jamais mis en cache : une nouvelle version arrive
+      # dès la prochaine ouverture (iOS garde sinon l'ancienne longtemps).
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    envVars:
+      - key: FLUTTER_VERSION
+        value: 3.44.0
+      - key: QR_STUDIO_API_URL
+        value: https://qr-studio-api-q71x.onrender.com

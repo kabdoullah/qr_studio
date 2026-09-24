@@ -61,21 +61,29 @@ final class HttpFileStorageService implements FileStorageService {
 
   @override
   Future<String> upload(SharedFile file, SharedFileKind kind) async {
-    final path = file.localPath;
-    if (path == null) {
-      throw FileUploadException('Fichier local introuvable : ${file.name}');
-    }
     final endpoint = _baseUrl.resolve(switch (kind) {
       SharedFileKind.cv => 'api/v1/cvs',
       SharedFileKind.businessCardImage => 'api/v1/cards',
     });
 
-    // Le fichier est lu en flux depuis le disque, sans être chargé en
-    // mémoire. Le serveur vérifie lui-même le type réel du contenu.
-    final request = http.MultipartRequest('POST', endpoint)
-      ..files.add(
-        await http.MultipartFile.fromPath('file', path, filename: file.name),
+    // Sur mobile, le fichier est lu en flux depuis le disque, sans être
+    // chargé en mémoire ; sur le web, son contenu est déjà en mémoire. Le
+    // serveur vérifie lui-même le type réel du contenu.
+    final bytes = file.bytes;
+    final path = file.localPath;
+    final http.MultipartFile part;
+    if (bytes != null) {
+      part = http.MultipartFile.fromBytes('file', bytes, filename: file.name);
+    } else if (path != null) {
+      part = await http.MultipartFile.fromPath(
+        'file',
+        path,
+        filename: file.name,
       );
+    } else {
+      throw FileUploadException('Fichier local introuvable : ${file.name}');
+    }
+    final request = http.MultipartRequest('POST', endpoint)..files.add(part);
     final response = await http.Response.fromStream(
       await _client.send(request).timeout(timeout),
     ).timeout(timeout);

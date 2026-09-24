@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +96,23 @@ void main() {
         reason: '$body',
       );
     }
+  });
+
+  test('sur le web, envoie le contenu gardé en mémoire', () async {
+    final service = serviceReplying(201, {'url': 'https://x/cv/y'});
+
+    final url = await service.upload(
+      SharedFile(
+        name: 'CV.pdf',
+        size: 8,
+        bytes: Uint8List.fromList(utf8.encode('%PDF-1.7')),
+      ),
+      SharedFileKind.cv,
+    );
+
+    expect(url, 'https://x/cv/y');
+    expect(requests.single.body, contains('name="file"; filename="CV.pdf"'));
+    expect(requests.single.body, contains('%PDF-1.7'));
   });
 
   test('sans fichier local, rien n’est envoyé', () async {
