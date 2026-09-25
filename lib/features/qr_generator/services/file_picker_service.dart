@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/shared_file.dart';
+import 'picker_web_options_stub.dart'
+    if (dart.library.js_interop) 'picker_web_options_web.dart';
 
 // Sélection de fichiers sur l'appareil via le sélecteur natif. Renvoie
 // `null` si l'utilisateur annule. Le contenu n'est pas chargé en mémoire,
@@ -15,6 +17,7 @@ class FilePickerService {
     FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
+      webOptions: pickerWebOptions,
     ),
   );
 
@@ -23,6 +26,7 @@ class FilePickerService {
   Future<SharedFile?> pickImage() => _pick(
     FilePicker.pickFile(
       type: FileType.image,
+      webOptions: pickerWebOptions,
       darwinOptions: const DarwinOptions(
         assetRepresentationMode: DarwinAssetRepresentationMode.compatible,
       ),

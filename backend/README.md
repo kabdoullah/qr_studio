@@ -107,6 +107,12 @@ Android, réseau local sur iOS. En production, servez l'API en HTTPS.
 | `QR_STUDIO_DATA_DIR`       | `data`                                   | Stockage local (sans base)            |
 | `QR_STUDIO_CORS_ORIGINS`   | vide                                     | Origines web autorisées (PWA), séparées par des virgules |
 
+Sans `QR_STUDIO_CORS_ORIGINS`, le navigateur bloque tout appel de la PWA
+(échec de l'envoi des fichiers). Indiquez l'origine exacte, sans `/` final,
+par exemple `https://qr-studio-web.onrender.com,http://localhost:8080`. En
+local, `flutter run -d chrome` choisit un port différent à chaque lancement :
+fixez-le avec `--web-port 8080`.
+
 Sur Render (`RENDER` défini), le serveur **refuse de démarrer sans
 `DATABASE_URL`** : le disque y est effacé à chaque déploiement, et les QR
 Codes déjà partagés pointeraient vers des fichiers disparus.
