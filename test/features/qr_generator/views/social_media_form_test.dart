@@ -101,7 +101,7 @@ void main() {
 
     expect(service.created.single.title, 'Awa Traoré');
     expect(find.byType(QrResultView), findsOneWidget);
-    expect(find.text('Votre page est en ligne 🎉'), findsOneWidget);
+    expect(find.text('Votre page est en ligne'), findsOneWidget);
     expect(find.text(FakeQrCodeService.publicUrl(1)), findsOneWidget);
   });
 

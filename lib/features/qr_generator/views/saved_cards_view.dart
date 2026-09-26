@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_dimens.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../models/business_card_data.dart';
 import '../viewmodels/qr_content_view_model.dart';
 import '../viewmodels/saved_cards_view_model.dart';
@@ -55,7 +56,12 @@ class _SavedCardsViewState extends ConsumerState<SavedCardsView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.gutter,
+                    AppSpacing.xs,
+                    AppSpacing.gutter,
+                    AppSpacing.sm,
+                  ),
                   child: ValueListenableBuilder(
                     valueListenable: _search,
                     builder: (context, value, _) => TextField(
@@ -79,9 +85,9 @@ class _SavedCardsViewState extends ConsumerState<SavedCardsView> {
                 ),
                 Expanded(
                   child: switch (cards) {
-                    AsyncData(:final value) when value.isEmpty => _Message(
+                    AsyncData(:final value) when value.isEmpty => EmptyState(
                       icon: Icons.person_search_outlined,
-                      text: query.isEmpty
+                      title: query.isEmpty
                           ? 'Aucune carte partagée pour le moment.'
                           : 'Aucune carte ne correspond à « $query ».',
                     ),
@@ -89,9 +95,10 @@ class _SavedCardsViewState extends ConsumerState<SavedCardsView> {
                       cards: value,
                       onSelect: select,
                     ),
-                    AsyncError() => _Message(
+                    AsyncError() => EmptyState(
                       icon: Icons.cloud_off_rounded,
-                      text: SavedCardsViewModel.loadFailedMessage,
+                      title: 'Chargement impossible',
+                      message: SavedCardsViewModel.loadFailedMessage,
                       action: OutlinedButton.icon(
                         onPressed: viewModel.retry,
                         icon: const Icon(Icons.refresh_rounded),
@@ -160,7 +167,7 @@ class _CardTile extends StatelessWidget {
         minTileHeight: 72,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radius),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
         leading: CircleAvatar(
           backgroundColor: colors.primaryContainer,
@@ -170,39 +177,6 @@ class _CardTile extends StatelessWidget {
         title: Text(name),
         subtitle: details.isEmpty ? null : Text(details),
         trailing: const Icon(Icons.chevron_right_rounded),
-      ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.text, this.action});
-
-  final IconData icon;
-  final String text;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          Icon(icon, size: 48, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (action case final action?) ...[
-            const SizedBox(height: 16),
-            action,
-          ],
-        ],
       ),
     );
   }

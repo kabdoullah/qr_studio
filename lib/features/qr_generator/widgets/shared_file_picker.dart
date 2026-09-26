@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_dimens.dart';
 import '../../../core/utils/file_size_formatter.dart';
 import '../../../core/widgets/error_message.dart';
+import '../../../core/widgets/icon_badge.dart';
+import '../../../core/widgets/loading_button.dart';
 import '../models/shared_file.dart';
 import '../viewmodels/qr_content_state.dart';
 import '../viewmodels/qr_content_view_model.dart';
@@ -78,7 +80,7 @@ class SharedFilePicker extends ConsumerWidget {
       children: [
         const SizedBox(height: 8),
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
+          duration: AppDurations.normal,
           child: file == null
               ? _EmptyCard(
                   kind: kind,
@@ -128,14 +130,24 @@ class _EmptyCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Card(
+    return Container(
       key: const ValueKey('empty'),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: colors.outline),
+      ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.xxl,
+          AppSpacing.xl,
+          AppSpacing.xl,
+        ),
         child: Column(
           children: [
-            _FileIcon(size: 64, icon: copy.icon),
-            const SizedBox(height: 16),
+            IconBadge(copy.icon, size: 64),
+            const SizedBox(height: AppSpacing.md),
             Semantics(
               header: true,
               child: Text(
@@ -156,8 +168,8 @@ class _EmptyCard extends StatelessWidget {
             FilledButton.icon(
               onPressed: state.isBusy ? null : onPick,
               icon: state.status == FileStatus.selecting
-                  ? const _ButtonSpinner()
-                  : const Icon(Icons.attach_file_rounded),
+                  ? const ButtonSpinner()
+                  : const Icon(Icons.upload_file_rounded),
               label: Text(copy.pickLabel),
             ),
             const SizedBox(height: 8),
@@ -215,7 +227,7 @@ class _SelectedCard extends StatelessWidget {
                     file: file,
                     fallback: copy.icon,
                   ),
-                  SharedFileKind.cv => _FileIcon(size: 40, icon: copy.icon),
+                  SharedFileKind.cv => IconBadge(copy.icon, size: 48),
                 },
                 const SizedBox(width: 12),
                 Expanded(
@@ -248,7 +260,7 @@ class _SelectedCard extends StatelessWidget {
               child: Row(
                 children: [
                   if (state.status == FileStatus.uploading)
-                    const _ButtonSpinner()
+                    const ButtonSpinner()
                   else
                     Icon(statusIcon, size: 20, color: colors.primary),
                   const SizedBox(width: 8),
@@ -264,38 +276,25 @@ class _SelectedCard extends StatelessWidget {
                 ],
               ),
             ),
+            // Durée inconnue (serveur en veille) : barre indéterminée.
+            if (state.status == FileStatus.uploading) ...[
+              const SizedBox(height: AppSpacing.sm),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                child: const LinearProgressIndicator(minHeight: 6),
+              ),
+            ],
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: state.isBusy ? null : onPick,
               icon: state.status == FileStatus.selecting
-                  ? const _ButtonSpinner()
+                  ? const ButtonSpinner()
                   : const Icon(Icons.swap_horiz_rounded),
               label: const Text('Remplacer'),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _FileIcon extends StatelessWidget {
-  const _FileIcon({required this.size, required this.icon});
-
-  final double size;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: colors.primaryContainer,
-        borderRadius: BorderRadius.circular(AppTheme.radius - 4),
-      ),
-      child: Icon(icon, size: size * 0.55, color: colors.primary),
     );
   }
 }
@@ -312,7 +311,7 @@ class _ImageThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = _FileIcon(size: _size, icon: fallback);
+    final placeholder = IconBadge(fallback, size: _size);
     // Sur le web, l'image est en mémoire ; sur mobile, elle est lue sur le
     // disque.
     final bytes = file.bytes;
@@ -326,7 +325,7 @@ class _ImageThumbnail extends StatelessWidget {
 
     final pixels = (_size * MediaQuery.devicePixelRatioOf(context)).round();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(AppTheme.radius - 4),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: Image(
         image: ResizeImage(image, width: pixels),
         width: _size,
@@ -335,18 +334,6 @@ class _ImageThumbnail extends StatelessWidget {
         excludeFromSemantics: true,
         errorBuilder: (context, error, stackTrace) => placeholder,
       ),
-    );
-  }
-}
-
-class _ButtonSpinner extends StatelessWidget {
-  const _ButtonSpinner();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.square(
-      dimension: 18,
-      child: CircularProgressIndicator(strokeWidth: 2),
     );
   }
 }

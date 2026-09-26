@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
+import '../../../app/theme/app_dimens.dart';
+import '../../../core/widgets/loading_button.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_layout.dart';
 import '../widgets/social_sign_in_buttons.dart';
@@ -39,8 +41,9 @@ class _LoginViewState extends ConsumerState<LoginView> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authViewModelProvider);
     return AuthLayout(
-      title: 'Connexion',
-      subtitle: 'Créez et partagez vos QR Codes.',
+      title: 'Vos QR Codes,\nau même endroit.',
+      subtitle:
+          'Connectez-vous pour créer, retrouver et partager vos QR Codes.',
       errorMessage: auth.errorMessage,
       children: [
         Form(
@@ -58,7 +61,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
                 textInputAction: TextInputAction.next,
                 validator: (v) => AuthViewModel.validateEmail(v ?? ''),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               PasswordField(
                 controller: _password,
                 label: 'Mot de passe',
@@ -69,10 +72,9 @@ class _LoginViewState extends ConsumerState<LoginView> {
                     v.isEmpty ? 'Veuillez saisir votre mot de passe.' : null,
                 onSubmitted: _submit,
               ),
-              const SizedBox(height: 24),
-              SubmitButton(
-                label: 'Se connecter',
-                busyLabel: 'Connexion…',
+              const SizedBox(height: AppSpacing.xl),
+              LoadingButton(
+                label: auth.isSubmitting ? 'Connexion…' : 'Se connecter',
                 isBusy: auth.isSubmitting,
                 onPressed: _submit,
               ),
@@ -80,20 +82,16 @@ class _LoginViewState extends ConsumerState<LoginView> {
           ),
         ),
         const SocialSignInButtons(),
-        const SizedBox(height: 32),
-        Text(
-          'Pas encore de compte ?',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        TextButton(
+        const SizedBox(height: AppSpacing.xl),
+        AuthSwitchLink(
+          question: 'Pas encore de compte ?',
+          action: 'Créer un compte',
           onPressed: auth.isSubmitting
               ? null
               : () {
                   ref.read(authViewModelProvider.notifier).clearError();
                   context.push(AppRoutes.register);
                 },
-          child: const Text('Créer un compte'),
         ),
       ],
     );

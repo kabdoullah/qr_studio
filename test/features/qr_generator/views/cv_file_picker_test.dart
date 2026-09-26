@@ -99,7 +99,7 @@ void main() {
     await tester.tap(find.text('Générer le QR Code'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Votre CV est prêt 🎉'), findsOneWidget);
+    expect(find.text('Votre CV est prêt'), findsOneWidget);
     expect(find.text('CV_Abdoullah_Coulibaly.pdf'), findsOneWidget);
     expect(find.text(FakeQrCodeService.publicUrl(1)), findsOneWidget);
 
@@ -159,6 +159,6 @@ void main() {
 
     storage.gate!.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Votre CV est prêt 🎉'), findsOneWidget);
+    expect(find.text('Votre CV est prêt'), findsOneWidget);
   });
 }

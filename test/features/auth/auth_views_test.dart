@@ -50,7 +50,7 @@ void main() {
     await pumpApp(tester);
 
     expect(find.byType(LoginView), findsOneWidget);
-    expect(find.text('Créez et partagez vos QR Codes.'), findsOneWidget);
+    expect(find.text('Vos QR Codes,\nau même endroit.'), findsOneWidget);
     expect(find.text('Se connecter'), findsOneWidget);
     expect(find.text('Créer un compte'), findsOneWidget);
   });

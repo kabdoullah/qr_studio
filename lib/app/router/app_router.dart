@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/widgets/brand_mark.dart';
 import '../../features/auth/viewmodels/auth_view_model.dart';
+import '../theme/app_dimens.dart';
 import '../../features/auth/views/login_view.dart';
 import '../../features/auth/views/register_view.dart';
 import '../../features/qr_generator/services/business_card_directory_service.dart';
@@ -125,7 +127,17 @@ class _SplashView extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       body: Center(
-        child: CircularProgressIndicator(semanticsLabel: 'Chargement'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            BrandMark(),
+            SizedBox(height: AppSpacing.xl),
+            SizedBox(
+              width: 120,
+              child: LinearProgressIndicator(semanticsLabel: 'Chargement'),
+            ),
+          ],
+        ),
       ),
     );
   }

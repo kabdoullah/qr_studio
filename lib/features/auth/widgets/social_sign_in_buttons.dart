@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_dimens.dart';
 import '../services/facebook_auth_service.dart';
 import '../services/google_auth_service.dart';
 import '../viewmodels/auth_view_model.dart';
@@ -27,24 +29,51 @@ class SocialSignInButtons extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
         const _OrDivider(),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
         if (google.isAvailable)
           google.usesGoogleButton
               ? _GoogleWebButton(google)
-              : OutlinedButton(
+              : OutlinedButton.icon(
                   onPressed: isBusy ? null : viewModel.loginWithGoogle,
-                  child: const Text('Continuer avec Google'),
+                  icon: const _GoogleGlyph(),
+                  label: const Text('Continuer avec Google'),
                 ),
         if (google.isAvailable && facebook.isAvailable)
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.sm),
         if (facebook.isAvailable)
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: isBusy ? null : viewModel.loginWithFacebook,
-            child: const Text('Continuer avec Facebook'),
+            icon: const Icon(Icons.facebook_rounded, color: AppColors.facebook),
+            label: const Text('Continuer avec Facebook'),
           ),
       ],
+    );
+  }
+}
+
+// « G » de Google, sobre : le bouton reste neutre, sans publicité.
+class _GoogleGlyph extends StatelessWidget {
+  const _GoogleGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: 24,
+        child: Center(
+          child: Text(
+            'G',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onSurface,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

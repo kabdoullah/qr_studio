@@ -22,7 +22,7 @@ void main() {
     await pumpApp(tester);
 
     expect(
-      find.text('Créez votre QR Code\nsimplement et rapidement.'),
+      find.text('Créez votre QR Code\nen quelques secondes.'),
       findsOneWidget,
     );
     expect(find.byType(QrTypeCard), findsNWidgets(QrType.values.length));

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
 
+import '../../../app/theme/app_dimens.dart';
 import '../models/shared_file.dart';
 import '../services/business_card_directory_service.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -28,17 +29,15 @@ class BusinessCardContent extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.xs),
         SegmentedButton<BusinessCardMode>(
           segments: const [
             ButtonSegment(
               value: BusinessCardMode.details,
-              icon: Icon(Icons.edit_note_rounded),
               label: Text('Mes coordonnées'),
             ),
             ButtonSegment(
               value: BusinessCardMode.image,
-              icon: Icon(Icons.image_outlined),
               label: Text('Image de ma carte'),
             ),
           ],
@@ -53,7 +52,7 @@ class BusinessCardContent extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (hasDirectory) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 OutlinedButton.icon(
                   onPressed: () => context.push(AppRoutes.savedCards),
                   icon: const Icon(Icons.contacts_outlined),
@@ -65,7 +64,7 @@ class BusinessCardContent extends ConsumerWidget {
             ],
           ),
           BusinessCardMode.image => const Padding(
-            padding: EdgeInsets.only(top: 16),
+            padding: EdgeInsets.only(top: AppSpacing.md),
             child: SharedFilePicker(kind: SharedFileKind.businessCardImage),
           ),
         },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/section_header.dart';
 import '../models/business_card_data.dart';
 import '../models/qr_type.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -71,7 +72,7 @@ class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _SectionTitle('Informations personnelles'),
+            const SectionHeader('Informations personnelles'),
             _FieldRow(
               first: _Field(
                 label: 'Prénom *',
@@ -106,7 +107,7 @@ class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
                 onChanged: (v) => update((c) => c.copyWith(company: v)),
               ),
             ),
-            const _SectionTitle('Contact'),
+            const SectionHeader('Contact', divider: true),
             _FieldRow(
               first: _Field(
                 label: 'Téléphone',
@@ -131,7 +132,7 @@ class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
               autofillHints: const [AutofillHints.url],
               onChanged: (v) => update((c) => c.copyWith(website: v)),
             ),
-            const _SectionTitle('Adresse'),
+            const SectionHeader('Adresse', divider: true),
             _Field(
               label: 'Adresse',
               initialValue: card.address,
@@ -156,7 +157,11 @@ class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
                 onChanged: (v) => update((c) => c.copyWith(country: v)),
               ),
             ),
-            const _SectionTitle('Réseaux sociaux', subtitle: 'Facultatif'),
+            const SectionHeader(
+              'Réseaux sociaux',
+              subtitle: 'Facultatif',
+              divider: true,
+            ),
             _FieldRow(
               first: _Field(
                 label: 'LinkedIn',
@@ -219,39 +224,6 @@ class _FieldRow extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.subtitle});
-
-  final String title;
-  final String? subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 12),
-      child: Semantics(
-        header: true,
-        child: Text.rich(
-          TextSpan(
-            text: title,
-            style: theme.textTheme.titleMedium,
-            children: [
-              if (subtitle != null)
-                TextSpan(
-                  text: '  ·  $subtitle',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

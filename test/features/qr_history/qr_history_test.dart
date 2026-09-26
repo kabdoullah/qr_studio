@@ -14,6 +14,7 @@ import 'package:qr_studio/features/qr_generator/views/qr_content_view.dart';
 import 'package:qr_studio/features/qr_generator/views/qr_result_view.dart';
 import 'package:qr_studio/features/qr_generator/widgets/qr_preview.dart';
 import 'package:qr_studio/features/qr_history/viewmodels/qr_history_view_model.dart';
+import 'package:qr_studio/features/qr_generator/views/qr_generator_view.dart';
 import 'package:qr_studio/features/qr_history/views/qr_history_view.dart';
 
 import '../../helpers/fake_services.dart';
@@ -328,6 +329,42 @@ void main() {
       expect(find.text('Wi-Fi Maison'), findsOneWidget);
     });
 
+    testWidgets('la recherche filtre par titre ou par type', (tester) async {
+      await openHistory(tester);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Rechercher'),
+        'wi-fi',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Wi-Fi Maison'), findsOneWidget);
+      expect(find.text('Mon portfolio'), findsNothing);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Rechercher'),
+        'introuvable',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Aucun QR Code ne correspond à « introuvable ».'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Effacer la recherche'));
+      await tester.pumpAndSettle();
+      expect(find.text('Mon portfolio'), findsOneWidget);
+      expect(find.text('Wi-Fi Maison'), findsOneWidget);
+    });
+
+    testWidgets('liste vide : bouton pour créer un QR Code', (tester) async {
+      service.items.clear();
+      await openHistory(tester);
+
+      await tester.tap(find.text('Créer un QR Code'));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrGeneratorView), findsOneWidget);
+    });
+
     testWidgets('Ouvrir affiche le QR Code enregistré', (tester) async {
       await openHistory(tester);
 
@@ -467,7 +504,7 @@ void main() {
       await openHistory(tester);
 
       expect(
-        find.textContaining('Aucun QR Code pour le moment.'),
+        find.textContaining("Vous n'avez encore créé aucun"),
         findsOneWidget,
       );
     });

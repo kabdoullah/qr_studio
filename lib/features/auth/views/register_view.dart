@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_router.dart';
 
 import '../../../core/utils/validators.dart';
+import '../../../app/theme/app_dimens.dart';
+import '../../../core/widgets/loading_button.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_layout.dart';
 import '../widgets/social_sign_in_buttons.dart';
@@ -118,10 +120,11 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                     AuthViewModel.validateConfirmation(_password.text, v),
                 onSubmitted: _submit,
               ),
-              const SizedBox(height: 24),
-              SubmitButton(
-                label: 'Créer mon compte',
-                busyLabel: 'Création du compte…',
+              const SizedBox(height: AppSpacing.xl),
+              LoadingButton(
+                label: auth.isSubmitting
+                    ? 'Création du compte…'
+                    : 'Créer mon compte',
                 isBusy: auth.isSubmitting,
                 onPressed: _submit,
               ),
@@ -129,13 +132,10 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
           ),
         ),
         const SocialSignInButtons(),
-        const SizedBox(height: 32),
-        Text(
-          'Déjà un compte ?',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        TextButton(
+        const SizedBox(height: AppSpacing.xl),
+        AuthSwitchLink(
+          question: 'Déjà un compte ?',
+          action: 'Se connecter',
           onPressed: auth.isSubmitting
               ? null
               : () {
@@ -144,7 +144,6 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                       ? context.pop()
                       : context.go(AppRoutes.login);
                 },
-          child: const Text('Se connecter'),
         ),
       ],
     );

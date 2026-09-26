@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/section_header.dart';
 import '../models/text_qr_data.dart';
 import '../models/qr_type.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -12,7 +13,6 @@ class TextForm extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Valeur initiale : conservée lorsque l'utilisateur revient modifier.
     final initialText = ref.read(qrContentViewModelProvider).text.text;
     final showAllErrors = ref.watch(
@@ -28,19 +28,10 @@ class TextForm extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 8),
-          Semantics(
-            header: true,
-            child: Text('Votre texte', style: theme.textTheme.titleLarge),
+          const SectionHeader(
+            'Votre texte',
+            description: 'Écrivez le contenu que vous souhaitez partager.',
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Écrivez le contenu que vous souhaitez partager.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
           TextFormField(
             initialValue: initialText,
             minLines: 5,

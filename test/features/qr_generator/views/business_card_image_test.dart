@@ -97,7 +97,7 @@ void main() {
     await tester.tap(find.text('Générer le QR Code'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Votre QR Code est prêt 🎉'), findsOneWidget);
+    expect(find.text('Votre QR Code est prêt'), findsOneWidget);
     expect(find.text('carte.jpg'), findsOneWidget);
     expect(find.text(FakeQrCodeService.publicUrl(1)), findsOneWidget);
     expect(

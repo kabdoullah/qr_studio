@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_colors.dart';
+
 // Types de contenu pris en charge, avec leur présentation.
 enum QrType {
   businessCard(
@@ -7,50 +9,56 @@ enum QrType {
     title: 'Carte de visite',
     description: 'Partagez vos coordonnées',
     icon: Icons.person_outline_rounded,
-    readyMessage: 'Votre QR Code est prêt 🎉',
+    accent: AppColors.indigo,
+    readyMessage: 'Votre QR Code est prêt',
     fileName: 'qr-code-carte-de-visite.png',
   ),
   cv(
     apiName: 'cv',
     title: 'CV',
-    description: 'Partagez votre CV PDF',
+    description: 'Partagez votre CV en PDF',
     icon: Icons.description_outlined,
-    readyMessage: 'Votre CV est prêt 🎉',
+    accent: AppColors.rose,
+    readyMessage: 'Votre CV est prêt',
     fileName: 'qr-code-cv.png',
     isDynamic: true,
   ),
   text(
     apiName: 'text',
     title: 'Texte',
-    description: 'Partagez un message',
+    description: 'Transformez un texte en QR Code',
     icon: Icons.notes_rounded,
-    readyMessage: 'Votre QR Code est prêt 🎉',
+    accent: AppColors.slate,
+    readyMessage: 'Votre QR Code est prêt',
     fileName: 'qr-code-texte.png',
   ),
   socialMedia(
     apiName: 'social_media',
     title: 'Réseaux sociaux',
-    description: 'Partagez tous vos réseaux avec un seul QR Code',
+    description: 'Tous vos réseaux au même endroit',
     icon: Icons.hub_outlined,
-    readyMessage: 'Votre page est en ligne 🎉',
+    accent: AppColors.violet,
+    readyMessage: 'Votre page est en ligne',
     fileName: 'qr-code-reseaux-sociaux.png',
     isDynamic: true,
   ),
   website(
     apiName: 'website',
     title: 'Site Web',
-    description: 'Créez un QR Code vers votre site',
+    description: 'Partagez votre site',
     icon: Icons.language_rounded,
-    readyMessage: 'Votre QR Code est prêt 🎉',
+    accent: AppColors.sky,
+    readyMessage: 'Votre QR Code est prêt',
     fileName: 'qr-code-site-web.png',
     isDynamic: true,
   ),
   wifi(
     apiName: 'wifi',
     title: 'Wi-Fi',
-    description: 'Partagez facilement votre connexion Wi-Fi',
+    description: 'Partagez votre connexion',
     icon: Icons.wifi_rounded,
-    readyMessage: 'Votre QR Code Wi-Fi est prêt 🎉',
+    accent: AppColors.emerald,
+    readyMessage: 'Votre QR Code Wi-Fi est prêt',
     fileName: 'qr-code-wifi.png',
   );
 
@@ -59,6 +67,7 @@ enum QrType {
     required this.title,
     required this.description,
     required this.icon,
+    required this.accent,
     required this.readyMessage,
     required this.fileName,
     this.isDynamic = false,
@@ -70,6 +79,9 @@ enum QrType {
   final String title;
   final String description;
   final IconData icon;
+
+  // Couleur d'accent de l'icône (accueil, Mes QR Codes).
+  final AccentColor accent;
 
   // Titre de l'écran résultat.
   final String readyMessage;

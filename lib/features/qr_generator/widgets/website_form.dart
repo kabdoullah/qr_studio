@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/section_header.dart';
 import '../models/qr_type.dart';
 import '../models/website_qr_data.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -13,7 +14,6 @@ class WebsiteForm extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Valeurs initiales : conservées lorsque l'utilisateur revient modifier.
     final site = ref.read(qrContentViewModelProvider).website;
     final showAllErrors = ref.watch(
@@ -30,20 +30,12 @@ class WebsiteForm extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 8),
-          Semantics(
-            header: true,
-            child: Text('Votre site', style: theme.textTheme.titleLarge),
+          const SectionHeader(
+            'Votre site',
+            description:
+                'Partagez votre site avec un QR Code. Vous pourrez changer '
+                "l'adresse plus tard sans le réimprimer.",
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Créez un QR Code vers votre site. Vous pourrez changer '
-            "l'adresse plus tard sans réimprimer le QR Code.",
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
           TextFormField(
             initialValue: site.title,
             decoration: const InputDecoration(

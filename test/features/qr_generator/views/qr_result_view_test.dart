@@ -53,7 +53,7 @@ void main() {
     await generateText(tester, 'Bonjour');
 
     expect(find.byType(QrResultView), findsOneWidget);
-    expect(find.text('Votre QR Code est prêt 🎉'), findsOneWidget);
+    expect(find.text('Votre QR Code est prêt'), findsOneWidget);
     expect(find.text(QrType.text.title), findsOneWidget);
     expect(tester.widget<QrPreview>(find.byType(QrPreview)).data, 'Bonjour');
     expect(find.text('Modifier'), findsOneWidget);
@@ -128,7 +128,7 @@ void main() {
     await tester.tap(find.text('Générer le QR Code'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Votre QR Code est prêt 🎉'), findsOneWidget);
+    expect(find.text('Votre QR Code est prêt'), findsOneWidget);
     expect(find.text(QrType.businessCard.title), findsOneWidget);
   });
 

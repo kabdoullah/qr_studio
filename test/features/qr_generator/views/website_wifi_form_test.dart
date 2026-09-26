@@ -100,7 +100,7 @@ void main() {
       expect(find.byType(QrLivePreview), findsOneWidget);
       await generate(tester);
 
-      expect(find.text('Votre QR Code Wi-Fi est prêt 🎉'), findsOneWidget);
+      expect(find.text('Votre QR Code Wi-Fi est prêt'), findsOneWidget);
       expect(service.created.single.content['hidden'], isTrue);
       // Le mot de passe n'est jamais affiché sur l'écran résultat.
       expect(find.textContaining('secret-wifi'), findsNothing);

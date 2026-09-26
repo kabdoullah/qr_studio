@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/section_header.dart';
+import '../../../core/widgets/visibility_toggle.dart';
 import '../models/qr_type.dart';
 import '../models/wifi_qr_data.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -36,7 +38,6 @@ class _WifiFormState extends ConsumerState<WifiForm> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final initial = ref.read(qrContentViewModelProvider).wifi;
     final security = ref.watch(
       qrContentViewModelProvider.select((s) => s.wifi.security),
@@ -58,20 +59,12 @@ class _WifiFormState extends ConsumerState<WifiForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 8),
-          Semantics(
-            header: true,
-            child: Text('Votre réseau', style: theme.textTheme.titleLarge),
+          const SectionHeader(
+            'Votre réseau',
+            description:
+                'Partagez votre connexion en un scan : il suffit de scanner '
+                'le QR Code pour se connecter.',
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Partagez facilement votre connexion Wi-Fi : il suffit de '
-            'scanner le QR Code pour se connecter.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
           TextFormField(
             initialValue: initial.ssid,
             decoration: const InputDecoration(
@@ -115,17 +108,9 @@ class _WifiFormState extends ConsumerState<WifiForm> {
                   ? 'Mot de passe *'
                   : 'Mot de passe (réseau ouvert)',
               suffixIcon: security.needsPassword
-                  ? Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 4),
-                      child: TextButton(
-                        onPressed: () => setState(() => _obscured = !_obscured),
-                        child: Text(
-                          _obscured ? 'Afficher' : 'Masquer',
-                          semanticsLabel: _obscured
-                              ? 'Afficher le mot de passe'
-                              : 'Masquer le mot de passe',
-                        ),
-                      ),
+                  ? VisibilityToggle(
+                      obscured: _obscured,
+                      onPressed: () => setState(() => _obscured = !_obscured),
                     )
                   : null,
             ),
