@@ -26,6 +26,10 @@ flutter build web --release --dart-define-from-file=config/prod.json
 flutter run -d chrome --web-port 8080 --dart-define-from-file=config/local.json  # local web: pin the port so CORS can allow http://localhost:8080
 dart run flutter_launcher_icons              # after editing flutter_launcher_icons.yaml or assets/branding/
 dart run flutter_native_splash:create        # after editing flutter_native_splash.yaml
+# Both tools rewrite hand-tuned files: afterwards restore ios/Runner/Info.plist, ios/Runner.xcodeproj/project.pbxproj
+# (ASSETCATALOG_…=AppIcon bug) and web/index.html (keep the single viewport meta with viewport-fit=cover).
+# Adaptive icon = icon_android_background.png + icon_android_foreground.png (glyph in the safe zone) + monochrome;
+# Android 12+ splash = splash_android12.png (1152 px, content inside the central 768 px circle).
 
 # Backend (FastAPI), Python 3.9+ locally (Render runs 3.12)
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
@@ -70,6 +74,7 @@ Run native builds one at a time: an earlier parallel build filled the disk. Work
 
 - Flow state lives in two non-auto-dispose providers: `qrGeneratorViewModelProvider` (selected `QrType`) and `qrContentViewModelProvider` (`QrContentState`): business card data + `BusinessCardMode`, text, `website`, `wifi`, `socialPage`, one `FileState` per `SharedFileKind` (`cv`, `cardImage`), `saving` (`SaveState`, with the `type` its error belongs to), `editing` (the `SavedQrCode` being edited), `showErrorsFor`, and the last `QrCodeData` result.
 - Validation rules are static methods on `QrContentState`, shared by form validators and `is…Valid` getters.
+- Validation display: every field sets `autovalidateMode: AutovalidateMode.onUserInteraction` (errors only for the field being typed in). The `Form` itself is `disabled`, or `always` once `showErrorsFor` contains the type (after "Générer"); auth forms call `validate()` on submit. Never put `onUserInteraction` on a `Form`: Flutter then validates every field as soon as one changes.
 - `generateQr()`: validate → upload the file if needed (`FileStorageService.upload` → `RemoteFile { id, url }`, stored in `SharedFile.remoteId`) → `QrCodeService.create` or, when `editing` has the same type, `update` (same slug) → payload (static content, or `saved.publicUrl`). Titles are derived per type and clipped to 100 characters. Save errors show above the "Générer" button.
 - `openSaved(saved)` (history "Ouvrir"/"Modifier") fills the form for that type and sets `editing` + `result`; `resultFor(saved)` builds the `QrCodeData` without touching the form (history "Partager").
 - Live preview: `livePreviewProvider` (`null` for dynamic/file content) feeds `QrLivePreview`, under the form on phones and beside it at ≥ 840 dp.

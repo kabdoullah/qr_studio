@@ -1,14 +1,16 @@
 # Écran de lancement natif. Régénérer après modification :
 #   dart run flutter_native_splash:create
+# Couleurs : fonds clair et sombre de l'application (AppColors).
 flutter_native_splash:
-  color: "#FFFFFF"
-  color_dark: "#121318"
+  color: "#F8FAFC"
+  color_dark: "#0B1120"
   image: "assets/branding/splash_logo.png"
-  # Android 12+ : l'écran système affiche l'icône dans un cercle.
+  # Android 12+ : l'écran système affiche l'icône découpée en cercle
+  # (768 px sur une image de 1152 px) ; le dégradé remplit ce cercle.
   android_12:
-    image: "assets/branding/icon_android_foreground.png"
-    color: "#FFFFFF"
-    color_dark: "#121318"
+    image: "assets/branding/splash_android12.png"
+    color: "#F8FAFC"
+    color_dark: "#0B1120"
   fullscreen: false
   # PWA : affiché pendant le chargement de Flutter dans le navigateur.
   web: true

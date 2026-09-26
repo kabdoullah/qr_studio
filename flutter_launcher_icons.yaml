@@ -6,19 +6,21 @@ flutter_launcher_icons:
   image_path_ios: "assets/branding/icon_ios.png"
   remove_alpha_ios: true
   android: "ic_launcher"
-  # Anciennes versions d'Android : logo déjà arrondi.
+  # Anciennes versions d'Android (< 8) : logo déjà arrondi.
   image_path_android: "assets/branding/icon_rounded.png"
-  # Icône adaptative (Android 8+) : dessin réduit dans la zone sûre, dégradé
-  # prolongé jusqu'aux bords du calque.
+  # Icône adaptative (Android 8+) : dégradé en arrière-plan, glyphe QR dans
+  # la zone sûre (le lanceur découpe en cercle, carré arrondi…).
+  adaptive_icon_background: "assets/branding/icon_android_background.png"
   adaptive_icon_foreground: "assets/branding/icon_android_foreground.png"
-  adaptive_icon_background: "#19068C"
-  # L'image occupe déjà tout le calque : pas de marge supplémentaire.
+  # L'image est déjà dimensionnée pour la zone sûre : pas de marge en plus.
   adaptive_icon_foreground_inset: 0
+  # Icône thématique (Android 13+) : glyphe seul, recoloré par le système.
+  adaptive_icon_monochrome: "assets/branding/icon_android_monochrome.png"
   min_sdk_android: 21
   # PWA (web) : image pleine, utilisable aussi comme icône « maskable » et
   # comme icône d'écran d'accueil sur iOS.
   web:
     generate: true
     image_path: "assets/branding/icon_ios.png"
-    background_color: "#FFFFFF"
-    theme_color: "#3949AB"
+    background_color: "#F8FAFC"
+    theme_color: "#4F46E5"
