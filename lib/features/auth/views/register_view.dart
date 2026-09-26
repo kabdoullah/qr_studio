@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../app/router/app_router.dart';
 
 import '../../../core/utils/validators.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_layout.dart';
+import '../widgets/social_sign_in_buttons.dart';
 
 // Création de compte. Le compte créé est aussitôt connecté.
 class RegisterView extends ConsumerStatefulWidget {
@@ -123,6 +127,24 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               ),
             ],
           ),
+        ),
+        const SocialSignInButtons(),
+        const SizedBox(height: 32),
+        Text(
+          'Déjà un compte ?',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        TextButton(
+          onPressed: auth.isSubmitting
+              ? null
+              : () {
+                  ref.read(authViewModelProvider.notifier).clearError();
+                  context.canPop()
+                      ? context.pop()
+                      : context.go(AppRoutes.login);
+                },
+          child: const Text('Se connecter'),
         ),
       ],
     );

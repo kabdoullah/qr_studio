@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/viewmodels/auth_view_model.dart';
@@ -13,6 +14,8 @@ import '../../features/qr_generator/views/qr_generator_view.dart';
 import '../../features/qr_generator/views/qr_result_view.dart';
 import '../../features/qr_generator/views/saved_cards_view.dart';
 import '../../features/qr_history/views/qr_history_view.dart';
+
+part 'app_router.g.dart';
 
 // Chemins de navigation de l'application.
 abstract final class AppRoutes {
@@ -43,7 +46,8 @@ String? authRedirect(AuthStatus status, String location) {
 }
 
 // Routeur exposé via Riverpod pour pouvoir être surchargé dans les tests.
-final appRouterProvider = Provider<GoRouter>((ref) {
+@Riverpod(keepAlive: true)
+GoRouter appRouter(Ref ref) {
   // Réévalue les redirections à chaque changement de session (connexion,
   // déconnexion, session expirée).
   final authStatus = ValueNotifier(ref.read(authViewModelProvider).status);
@@ -111,7 +115,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     authStatus.dispose();
   });
   return router;
-});
+}
 
 // Affiché pendant la vérification de la session au démarrage.
 class _SplashView extends StatelessWidget {

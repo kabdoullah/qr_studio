@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../models/business_card_data.dart';
@@ -10,6 +10,8 @@ import '../models/saved_qr_code.dart';
 import '../models/social_network.dart';
 import '../models/text_qr_data.dart';
 import '../models/wifi_qr_data.dart';
+
+part 'qr_service.g.dart';
 
 // Construit le contenu textuel (payload) encodé dans les QR Codes.
 class QrService {
@@ -133,4 +135,5 @@ class QrService {
       .replaceAll(RegExp(r'\r\n|\r|\n'), r'\n');
 }
 
-final qrServiceProvider = Provider<QrService>((ref) => const QrService());
+@Riverpod(keepAlive: true)
+QrService qrService(Ref ref) => const QrService();

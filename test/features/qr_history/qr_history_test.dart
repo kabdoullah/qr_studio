@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/app/app.dart';
 import 'package:qr_studio/core/network/api_client.dart';
+import 'package:qr_studio/features/auth/viewmodels/auth_view_model.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/models/saved_qr_code.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_share_service.dart';
@@ -37,59 +40,255 @@ void main() {
   );
 
   late FakeQrCodeService service;
+  late FakeQrHistoryCache cache;
 
-  setUp(() => service = FakeQrCodeService()..items.addAll([website, wifi]));
+  setUp(() {
+    service = FakeQrCodeService()..items.addAll([website, wifi]);
+    cache = FakeQrHistoryCache();
+  });
 
-  group('QrHistoryViewModel', () {
+  group('QrHistoryViewModel (stale-while-revalidate)', () {
     late ProviderContainer container;
 
-    setUp(() {
-      container = ProviderContainer(overrides: signedIn(qrCodes: service));
+    QrHistoryState state() => container.read(qrHistoryViewModelProvider);
+    QrHistoryViewModel viewModel() =>
+        container.read(qrHistoryViewModelProvider.notifier);
+    List<String>? ids() => state().items?.map((q) => q.id).toList();
+
+    setUp(() async {
+      container = ProviderContainer(
+        overrides: signedIn(qrCodes: service, historyCache: cache),
+      );
       container.listen(qrHistoryViewModelProvider, (_, _) {});
+      // Session ouverte (compte connu du cache).
+      container.listen(authViewModelProvider, (_, _) {});
+      await pumpEventQueue();
     });
     tearDown(() => container.dispose());
 
-    test('charge les QR Codes du compte', () async {
-      final items = await container.read(qrHistoryViewModelProvider.future);
+    test('premier chargement : rien d’affiché, puis la liste', () async {
+      expect(state().hasItems, isFalse);
 
-      expect(items.map((q) => q.title), ['Mon portfolio', 'Wi-Fi Maison']);
+      final loading = viewModel().revalidate();
+      expect(state().isRevalidating, isTrue);
+      await loading;
+
+      expect(ids(), ['site', 'wifi']);
+      expect(state().isRevalidating, isFalse);
+    });
+
+    test('réouverture : la liste connue reste affichée pendant le '
+        'rechargement', () async {
+      await viewModel().revalidate();
+      service.items.removeAt(1);
+      service.gate = Completer<void>();
+
+      final loading = viewModel().revalidate();
+
+      expect(ids(), ['site', 'wifi']);
+      expect(state().isRevalidating, isTrue);
+      service.gate!.complete();
+      await loading;
+      expect(ids(), ['site']);
+      expect(state().isRevalidating, isFalse);
+    });
+
+    test('échec du rechargement : liste connue gardée, message', () async {
+      await viewModel().revalidate();
+      service.error = const ApiException(ApiErrorKind.offline);
+
+      await viewModel().revalidate();
+
+      expect(ids(), ['site', 'wifi']);
+      expect(
+        state().errorMessage,
+        const ApiException(ApiErrorKind.offline).message,
+      );
+      expect(state().isRevalidating, isFalse);
+    });
+
+    test('échec du premier chargement : message, aucune liste', () async {
+      service.error = const ApiException(ApiErrorKind.server);
+
+      await viewModel().revalidate();
+
+      expect(state().hasItems, isFalse);
+      expect(state().errorMessage, QrHistoryViewModel.loadFailedMessage);
+    });
+
+    test('un rechargement réussi efface le message d’échec', () async {
+      service.error = const ApiException(ApiErrorKind.offline);
+      await viewModel().revalidate();
+      service.error = null;
+
+      await viewModel().revalidate();
+
+      expect(state().errorMessage, isNull);
+      expect(ids(), ['site', 'wifi']);
+    });
+
+    test('rechargements simultanés : une seule requête', () async {
+      await Future.wait([
+        viewModel().revalidate(),
+        viewModel().revalidate(),
+        viewModel().revalidate(),
+      ]);
+
+      expect(service.lists, 1);
     });
 
     test('supprime un QR Code', () async {
-      await container.read(qrHistoryViewModelProvider.future);
+      await viewModel().revalidate();
 
-      final message = await container
-          .read(qrHistoryViewModelProvider.notifier)
-          .delete(website);
+      final message = await viewModel().delete(website);
 
       expect(message, QrHistoryViewModel.deletedMessage);
       expect(service.deleted, ['site']);
-      expect(
-        container.read(qrHistoryViewModelProvider).value?.map((q) => q.id),
-        ['wifi'],
-      );
+      expect(ids(), ['wifi']);
     });
 
     test('échec de suppression : message et liste inchangée', () async {
-      await container.read(qrHistoryViewModelProvider.future);
+      await viewModel().revalidate();
       service.error = const ApiException(ApiErrorKind.offline);
 
-      final message = await container
-          .read(qrHistoryViewModelProvider.notifier)
-          .delete(website);
+      final message = await viewModel().delete(website);
 
       expect(message, QrHistoryViewModel.deleteFailedMessage);
-      expect(container.read(qrHistoryViewModelProvider).value, hasLength(2));
+      expect(ids(), hasLength(2));
     });
 
-    test('échec de chargement : message pour l’utilisateur', () async {
-      service.error = const ApiException(ApiErrorKind.offline);
-      container.invalidate(qrHistoryViewModelProvider);
+    test('réponse partie avant une suppression : ignorée', () async {
+      await viewModel().revalidate();
+      final pendingList = Completer<void>();
+      service.gate = pendingList;
+      final loading = viewModel().revalidate();
 
-      await expectLater(
-        container.read(qrHistoryViewModelProvider.future),
-        throwsA(isA<QrHistoryException>()),
+      // Supprimé pendant le rechargement, dont la réponse contient encore
+      // le QR Code supprimé.
+      service.gate = null;
+      await viewModel().delete(website);
+      service.items.insert(0, website);
+      pendingList.complete();
+      await loading;
+
+      expect(ids(), ['wifi']);
+      expect(state().isRevalidating, isFalse);
+    });
+
+    test('QR Code créé ou modifié : la liste connue suit', () async {
+      await viewModel().revalidate();
+      const renamed = SavedQrCode(
+        id: 'site',
+        type: QrType.website,
+        title: 'Portfolio 2026',
+        publicUrl: 'https://qr.test/q/site',
+        content: {'url': 'https://example.com/2026'},
       );
+      const text = SavedQrCode(
+        id: 'texte',
+        type: QrType.text,
+        title: 'Bonjour',
+        publicUrl: 'https://qr.test/q/texte',
+        content: {'text': 'Bonjour'},
+      );
+
+      viewModel().upsert(renamed);
+      viewModel().upsert(text);
+
+      expect(ids(), ['texte', 'site', 'wifi']);
+      expect(state().items![1].title, 'Portfolio 2026');
+    });
+
+    group('cache sur l’appareil', () {
+      final userId = awaUser.id;
+
+      test('nouveau lancement : la liste enregistrée s’affiche avant le '
+          'serveur', () async {
+        cache.entries[userId] = [wifi];
+        service.gate = Completer<void>();
+
+        final loading = viewModel().revalidate();
+        await pumpEventQueue();
+
+        expect(ids(), ['wifi']);
+        expect(state().isRevalidating, isTrue);
+        service.gate!.complete();
+        await loading;
+        expect(ids(), ['site', 'wifi']);
+      });
+
+      test('la réponse du serveur est enregistrée', () async {
+        await viewModel().revalidate();
+
+        expect(cache.entries[userId]?.map((q) => q.id), ['site', 'wifi']);
+      });
+
+      test('suppressions et modifications enregistrées', () async {
+        await viewModel().revalidate();
+
+        await viewModel().delete(website);
+        viewModel().upsert(
+          const SavedQrCode(
+            id: 'wifi',
+            type: QrType.wifi,
+            title: 'Wi-Fi Bureau',
+            publicUrl: 'https://qr.test/q/wifi',
+            content: {'ssid': 'Bureau', 'security': 'WPA2'},
+          ),
+        );
+
+        expect(cache.entries[userId]?.map((q) => q.title), ['Wi-Fi Bureau']);
+      });
+
+      test(
+        'serveur injoignable : la liste enregistrée reste affichée',
+        () async {
+          cache.entries[userId] = [wifi];
+          service.error = const ApiException(ApiErrorKind.offline);
+
+          await viewModel().revalidate();
+
+          expect(ids(), ['wifi']);
+          expect(state().errorMessage, isNotNull);
+          // Un échec n'efface pas le cache.
+          expect(cache.entries[userId], hasLength(1));
+        },
+      );
+
+      test('le cache d’un autre compte n’est jamais affiché', () async {
+        cache.entries['autre-compte'] = [wifi];
+        service.gate = Completer<void>();
+
+        final loading = viewModel().revalidate();
+        await pumpEventQueue();
+
+        expect(state().hasItems, isFalse);
+        service.gate!.complete();
+        await loading;
+      });
+
+      test(
+        'réponse arrivée après la déconnexion : jamais enregistrée',
+        () async {
+          service.gate = Completer<void>();
+          final loading = viewModel().revalidate();
+          await pumpEventQueue();
+
+          await container.read(authViewModelProvider.notifier).logout();
+          service.gate!.complete();
+          await loading;
+
+          expect(cache.entries, isEmpty);
+        },
+      );
+    });
+
+    test('déconnexion : le cache du compte est vidé', () async {
+      await viewModel().revalidate();
+
+      await container.read(authViewModelProvider.notifier).logout();
+
+      expect(state().hasItems, isFalse);
     });
   });
 
@@ -101,7 +300,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...signedIn(qrCodes: service),
+            ...signedIn(qrCodes: service, historyCache: cache),
             qrShareServiceProvider.overrideWithValue(sharer),
             qrExportServiceProvider.overrideWithValue(FakeQrExportService()),
           ],
@@ -184,6 +383,83 @@ void main() {
       expect(service.deleted, ['site']);
       expect(find.text('Mon portfolio'), findsNothing);
       expect(find.text(QrHistoryViewModel.deletedMessage), findsOneWidget);
+    });
+
+    testWidgets('réouverture : liste connue affichée tout de suite, puis '
+        'actualisée', (tester) async {
+      await openHistory(tester);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      service.items.removeAt(0);
+      service.gate = Completer<void>();
+      await tester.tap(find.text('Mon compte'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mes QR Codes'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Données en cache, pas d'écran de chargement.
+      expect(find.text('Mon portfolio'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      service.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Mon portfolio'), findsNothing);
+      expect(find.text('Wi-Fi Maison'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+    });
+
+    testWidgets('actualisation impossible : liste gardée et message', (
+      tester,
+    ) async {
+      await openHistory(tester);
+      service.error = const ApiException(ApiErrorKind.offline);
+
+      await tester.fling(
+        find.text('Mon portfolio'),
+        const Offset(0, 400),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mon portfolio'), findsOneWidget);
+      expect(
+        find.text(const ApiException(ApiErrorKind.offline).message),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('premier chargement impossible : message et Réessayer', (
+      tester,
+    ) async {
+      service.error = const ApiException(ApiErrorKind.server);
+      await openHistory(tester);
+
+      expect(find.text(QrHistoryViewModel.loadFailedMessage), findsOneWidget);
+      service.error = null;
+      await tester.tap(find.text('Réessayer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mon portfolio'), findsOneWidget);
+    });
+
+    testWidgets('se déconnecter efface l’historique enregistré', (
+      tester,
+    ) async {
+      await openHistory(tester);
+      expect(cache.entries, isNotEmpty);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Mon compte'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.pumpAndSettle();
+
+      expect(cache.clears, 1);
+      expect(cache.entries, isEmpty);
     });
 
     testWidgets('liste vide', (tester) async {

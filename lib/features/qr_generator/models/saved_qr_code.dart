@@ -45,6 +45,16 @@ class SavedQrCode {
     return null;
   }
 
+  // Même forme que la réponse du serveur (relue par `fromJson`).
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'type': type.apiName,
+    'title': title,
+    'public_url': publicUrl,
+    'content': content,
+    if (updatedAt case final date?) 'updated_at': date.toIso8601String(),
+  };
+
   // Contenu d'un objet imbriqué (ex. `details` d'une carte de visite).
   Map<String, Object?> section(String name) =>
       content[name] is Map<String, Object?>

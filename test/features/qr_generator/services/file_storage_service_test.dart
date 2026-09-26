@@ -4,16 +4,17 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:qr_studio/core/network/api_client.dart';
+import 'package:qr_studio/core/network/session_token.dart';
 import 'package:qr_studio/features/qr_generator/models/shared_file.dart';
 import 'package:qr_studio/features/qr_generator/services/file_storage_service.dart';
+
+import '../../../helpers/fake_http_adapter.dart';
 
 void main() {
   late Directory dir;
   late SharedFile cv;
-  late List<http.Request> requests;
+  late List<RecordedRequest> requests;
 
   setUp(() {
     dir = Directory.systemTemp.createTempSync('qr_studio_upload_');
@@ -28,16 +29,16 @@ void main() {
     Object body, {
     String baseUrl = 'http://192.168.1.10:8000',
   }) {
-    final client = MockClient((request) async {
-      requests.add(request);
-      return http.Response.bytes(utf8.encode(jsonEncode(body)), status);
-    });
+    final adapter = FakeHttpAdapter((_) async => jsonResponse(status, body));
+    requests = adapter.requests;
     return HttpFileStorageService(
       ApiClient(
         baseUrl,
-        readToken: () => 'jeton',
+        readTokens: () =>
+            const AuthTokens(accessToken: 'jeton', refreshToken: 'r'),
+        onTokensRefreshed: (_) {},
         onUnauthorized: () {},
-        client: client,
+        adapter: adapter,
       ),
     );
   }
@@ -55,9 +56,9 @@ void main() {
     final request = requests.single;
     expect(request.method, 'POST');
     // Le fichier est rattaché au compte connecté.
-    expect(request.headers['authorization'], 'Bearer jeton');
-    expect(request.url.toString(), 'http://192.168.1.10:8000/api/v1/cvs');
-    expect(request.headers['content-type'], startsWith('multipart/form-data'));
+    expect(request.header('Authorization'), 'Bearer jeton');
+    expect(request.uri.toString(), 'http://192.168.1.10:8000/api/v1/cvs');
+    expect(request.header('content-type'), startsWith('multipart/form-data'));
     expect(request.body, contains('name="file"; filename="CV.pdf"'));
     expect(request.body, contains('%PDF-1.7'));
   });
@@ -70,7 +71,7 @@ void main() {
 
     await service.upload(cv, SharedFileKind.businessCardImage);
 
-    expect(requests.single.url.path, '/api/v1/cards');
+    expect(requests.single.uri.path, '/api/v1/cards');
   });
 
   test("conserve le chemin de l'adresse du serveur", () async {
@@ -81,7 +82,7 @@ void main() {
 
     await service.upload(cv, SharedFileKind.cv);
 
-    expect(requests.single.url.toString(), 'https://example.com/qr/api/v1/cvs');
+    expect(requests.single.uri.toString(), 'https://example.com/qr/api/v1/cvs');
   });
 
   test('un refus du serveur lève une exception avec son message', () async {

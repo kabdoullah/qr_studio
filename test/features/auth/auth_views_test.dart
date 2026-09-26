@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/app/app.dart';
+import 'package:qr_studio/core/network/api_client.dart';
 import 'package:qr_studio/features/auth/views/login_view.dart';
 import 'package:qr_studio/features/auth/views/register_view.dart';
 import 'package:qr_studio/features/qr_generator/views/qr_generator_view.dart';
@@ -11,13 +12,26 @@ import '../../helpers/fake_services.dart';
 void main() {
   late FakeAuthService auth;
   late FakeTokenStorage storage;
+  late FakeGoogleAuthService google;
+  late FakeFacebookAuthService facebook;
 
-  Future<void> pumpApp(WidgetTester tester, {String? token}) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    String? token,
+    bool social = false,
+  }) async {
     auth = FakeAuthService();
     storage = FakeTokenStorage(token);
+    google = FakeGoogleAuthService();
+    facebook = FakeFacebookAuthService();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: signedIn(auth: auth, storage: storage),
+        overrides: signedIn(
+          auth: auth,
+          storage: storage,
+          google: social ? google : null,
+          facebook: social ? facebook : null,
+        ),
         child: const QrStudioApp(),
       ),
     );
@@ -56,7 +70,7 @@ void main() {
     await tapButton(tester, 'Se connecter');
 
     expect(find.byType(QrGeneratorView), findsOneWidget);
-    expect(storage.token, isNotNull);
+    expect(storage.refreshToken, isNotNull);
   });
 
   testWidgets('connexion refusée : message et reste sur la connexion', (
@@ -127,7 +141,77 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(LoginView), findsOneWidget);
-    expect(storage.token, isNull);
+    expect(storage.refreshToken, isNull);
+  });
+
+  testWidgets('sans configuration, ni Google ni Facebook', (tester) async {
+    await pumpApp(tester);
+
+    expect(find.text('Continuer avec Google'), findsNothing);
+    expect(find.text('Continuer avec Facebook'), findsNothing);
+    expect(find.text('ou'), findsNothing);
+  });
+
+  group('Google et Facebook', () {
+    testWidgets('proposés sur la connexion et l’inscription', (tester) async {
+      await pumpApp(tester, social: true);
+
+      expect(find.text('ou'), findsOneWidget);
+      expect(find.text('Continuer avec Google'), findsOneWidget);
+      expect(find.text('Continuer avec Facebook'), findsOneWidget);
+
+      await tapButton(tester, 'Créer un compte');
+      expect(find.text('Continuer avec Google'), findsOneWidget);
+      expect(find.text('Continuer avec Facebook'), findsOneWidget);
+      expect(find.text('Déjà un compte ?'), findsOneWidget);
+
+      await tapButton(tester, 'Se connecter');
+      expect(find.byType(LoginView), findsOneWidget);
+    });
+
+    testWidgets('Google : le serveur vérifie l’ID token, puis accueil', (
+      tester,
+    ) async {
+      await pumpApp(tester, social: true);
+
+      await tapButton(tester, 'Continuer avec Google');
+
+      expect(auth.googleTokens, ['google-id-token']);
+      expect(find.byType(QrGeneratorView), findsOneWidget);
+      expect(storage.refreshToken, isNotNull);
+    });
+
+    testWidgets('Google annulé : reste sur la connexion, sans message', (
+      tester,
+    ) async {
+      await pumpApp(tester, social: true);
+      google.next = null;
+
+      await tapButton(tester, 'Continuer avec Google');
+
+      expect(find.byType(LoginView), findsOneWidget);
+      expect(auth.googleTokens, isEmpty);
+      expect(find.textContaining('a échoué'), findsNothing);
+    });
+
+    testWidgets('Facebook refusé par le serveur : message affiché', (
+      tester,
+    ) async {
+      await pumpApp(tester, social: true);
+      auth.socialError = const ApiException(
+        ApiErrorKind.conflict,
+        serverMessage: 'Un compte existe déjà avec cette adresse.',
+      );
+
+      await tapButton(tester, 'Continuer avec Facebook');
+
+      expect(auth.facebookTokens, ['facebook-access-token']);
+      expect(find.byType(LoginView), findsOneWidget);
+      expect(
+        find.text('Un compte existe déjà avec cette adresse.'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('pas de débordement sur petit écran avec texte agrandi', (
@@ -139,7 +223,7 @@ void main() {
     addTearDown(tester.view.reset);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-    await pumpApp(tester);
+    await pumpApp(tester, social: true);
     expect(tester.takeException(), isNull);
 
     await tapButton(tester, 'Créer un compte');

@@ -28,6 +28,17 @@ services:
       # du service. La changer déconnecte tous les utilisateurs.
       - key: JWT_SECRET_KEY
         generateValue: true
+      # Connexion Google/Facebook, à saisir dans le tableau de bord. Vides :
+      # ces connexions répondent 503 (email et mot de passe restent
+      # disponibles).
+      # Client OAuth « Application Web » (public, pas un secret) : audience
+      # acceptée des ID tokens Google.
+      - key: GOOGLE_CLIENT_ID
+        value: 788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
 
   # PWA (Flutter web), pour les utilisateurs iOS : ouverte dans Safari puis
   # « Partager › Sur l'écran d'accueil ». Site statique servi par le CDN de
@@ -46,6 +57,8 @@ services:
       https://github.com/flutter/flutter.git "$HOME/flutter"; fi &&
       "$HOME/flutter/bin/flutter" build web --release
       --dart-define=QR_STUDIO_API_URL="$QR_STUDIO_API_URL"
+      --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+      --dart-define=FACEBOOK_APP_ID="$FACEBOOK_APP_ID"
     staticPublishPath: build/web
     # Le backend n'influe pas sur la PWA : pas de rebuild pour lui.
     buildFilter:
@@ -64,3 +77,9 @@ services:
         value: 3.44.0
       - key: QR_STUDIO_API_URL
         value: https://qr-studio-api-q71x.onrender.com
+      # Identifiants publics (pas des secrets) des connexions Google et
+      # Facebook ; vides, les boutons ne sont pas affichés.
+      - key: GOOGLE_CLIENT_ID
+        value: 788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+      - key: FACEBOOK_APP_ID
+        sync: false

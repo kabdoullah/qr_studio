@@ -28,8 +28,8 @@ class _SavedCardsViewState extends ConsumerState<SavedCardsView> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = ref.watch(savedCardsProvider);
-    final viewModel = ref.read(savedCardsProvider.notifier);
+    final cards = ref.watch(savedCardsViewModelProvider);
+    final viewModel = ref.read(savedCardsViewModelProvider.notifier);
     final query = _search.text.trim();
 
     void select(SavedBusinessCard card) {

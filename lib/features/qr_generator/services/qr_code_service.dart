@@ -1,8 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/network/api_client.dart';
 import '../models/qr_type.dart';
 import '../models/saved_qr_code.dart';
+
+part 'qr_code_service.g.dart';
 
 // QR Codes du compte connecté (`/api/v1/qr-codes`). Le serveur renvoie
 // 404 pour le QR Code d'un autre compte.
@@ -53,7 +55,8 @@ class QrCodeService {
 }
 
 // `null` sans adresse de serveur : l'enregistrement est alors indisponible.
-final qrCodeServiceProvider = Provider<QrCodeService?>((ref) {
+@Riverpod(keepAlive: true)
+QrCodeService? qrCodeService(Ref ref) {
   final api = ref.watch(apiClientProvider);
   return api == null ? null : QrCodeService(api);
-});
+}

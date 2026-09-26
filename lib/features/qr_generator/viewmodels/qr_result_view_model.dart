@@ -1,17 +1,20 @@
 import 'dart:developer' as developer;
 import 'dart:ui';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/qr_code_data.dart';
 import '../services/qr_export_service.dart';
 import '../services/qr_share_service.dart';
 
+part 'qr_result_view_model.g.dart';
+
 // Action d'export en cours sur l'écran résultat (`null` : aucune).
 enum QrResultAction { download, share }
 
 // Gère le téléchargement et le partage du QR Code généré.
-class QrResultViewModel extends Notifier<QrResultAction?> {
+@Riverpod(keepAlive: true)
+class QrResultViewModel extends _$QrResultViewModel {
   static const String savedMessage = 'QR Code enregistré.';
   static const String saveFailedMessage =
       "Impossible d'enregistrer le QR Code.\nVeuillez réessayer.";
@@ -75,6 +78,3 @@ class QrResultViewModel extends Notifier<QrResultAction?> {
     }
   }
 }
-
-final qrResultViewModelProvider =
-    NotifierProvider<QrResultViewModel, QrResultAction?>(QrResultViewModel.new);

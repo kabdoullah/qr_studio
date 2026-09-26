@@ -9,14 +9,30 @@ import '../../qr_generator/viewmodels/qr_content_view_model.dart';
 import '../../qr_generator/viewmodels/qr_result_view_model.dart';
 import '../viewmodels/qr_history_view_model.dart';
 
-// « Mes QR Codes » : ouvrir, modifier, partager ou supprimer.
-class QrHistoryView extends ConsumerWidget {
+// « Mes QR Codes » : ouvrir, modifier, partager ou supprimer. La dernière
+// liste connue s'affiche aussitôt ; elle est actualisée à chaque ouverture.
+class QrHistoryView extends ConsumerStatefulWidget {
   const QrHistoryView({super.key});
 
+  @override
+  ConsumerState<QrHistoryView> createState() => _QrHistoryViewState();
+}
+
+class _QrHistoryViewState extends ConsumerState<QrHistoryView> {
   static const double _maxContentWidth = 640;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    // Pas de modification d'état pendant la construction du widget.
+    Future.microtask(_revalidate);
+  }
+
+  Future<void> _revalidate() =>
+      ref.read(qrHistoryViewModelProvider.notifier).revalidate();
+
+  @override
+  Widget build(BuildContext context) {
     final history = ref.watch(qrHistoryViewModelProvider);
 
     return Scaffold(
@@ -27,37 +43,56 @@ class QrHistoryView extends ConsumerWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _maxContentWidth),
             child: switch (history) {
-              AsyncData(value: final items) when items.isEmpty =>
-                const _Message(
-                  'Aucun QR Code pour le moment.\n'
-                  'Ceux que vous créez apparaîtront ici.',
-                ),
-              AsyncData(value: final items) => RefreshIndicator(
-                onRefresh: () =>
-                    ref.read(qrHistoryViewModelProvider.notifier).reload(),
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) =>
-                      _QrCodeTile(qr: items[index]),
-                ),
+              QrHistoryState(items: final items?) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Hauteur réservée : la liste ne saute pas.
+                  SizedBox(
+                    height: 4,
+                    child: history.isRevalidating
+                        ? const LinearProgressIndicator(
+                            semanticsLabel: 'Actualisation de vos QR Codes',
+                          )
+                        : null,
+                  ),
+                  if (history.errorMessage case final message?)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: ErrorMessage(message),
+                    ),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _revalidate,
+                      child: items.isEmpty
+                          ? ListView(
+                              children: const [
+                                _Message(
+                                  'Aucun QR Code pour le moment.\n'
+                                  'Ceux que vous créez apparaîtront ici.',
+                                ),
+                              ],
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                              itemCount: items.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) =>
+                                  _QrCodeTile(qr: items[index]),
+                            ),
+                    ),
+                  ),
+                ],
               ),
-              AsyncError(:final error) => Padding(
+              QrHistoryState(errorMessage: final message?) => Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ErrorMessage(
-                      error is QrHistoryException
-                          ? error.message
-                          : QrHistoryViewModel.loadFailedMessage,
-                    ),
+                    ErrorMessage(message),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () => ref
-                          .read(qrHistoryViewModelProvider.notifier)
-                          .reload(),
+                      onPressed: _revalidate,
                       icon: const Icon(Icons.refresh_rounded),
                       label: const Text('Réessayer'),
                     ),

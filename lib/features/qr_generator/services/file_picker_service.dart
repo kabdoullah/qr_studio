@@ -1,10 +1,12 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/shared_file.dart';
 import 'web_file_input_stub.dart'
     if (dart.library.js_interop) 'web_file_input.dart';
+
+part 'file_picker_service.g.dart';
 
 // Sélection de fichiers sur l'appareil via le sélecteur natif. Renvoie
 // `null` si l'utilisateur annule. Le contenu n'est pas chargé en mémoire,
@@ -48,6 +50,5 @@ class FilePickerService {
   }
 }
 
-final filePickerServiceProvider = Provider<FilePickerService>(
-  (ref) => const FilePickerService(),
-);
+@Riverpod(keepAlive: true)
+FilePickerService filePickerService(Ref ref) => const FilePickerService();

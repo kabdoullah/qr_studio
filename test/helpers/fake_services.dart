@@ -14,10 +14,15 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:qr_studio/core/network/api_client.dart';
 import 'package:qr_studio/core/storage/token_storage.dart';
 import 'package:qr_studio/features/auth/models/app_user.dart';
+import 'package:qr_studio/core/network/session_token.dart';
+import 'package:qr_studio/features/auth/models/auth_session.dart';
 import 'package:qr_studio/features/auth/services/auth_service.dart';
+import 'package:qr_studio/features/auth/services/facebook_auth_service.dart';
+import 'package:qr_studio/features/auth/services/google_auth_service.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/models/saved_qr_code.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_code_service.dart';
+import 'package:qr_studio/features/qr_history/services/qr_history_cache.dart';
 
 // Sélecteur simulé : renvoie le résultat programmé, ou lève `error`.
 class FakeFilePickerService implements FilePickerService {
@@ -167,20 +172,26 @@ const jeanCard = SavedBusinessCard(
   ),
 );
 
-// Stockage du jeton simulé (en mémoire).
+// Stockage des jetons simulé (en mémoire). `FakeTokenStorage('refresh')`
+// : une session enregistrée avec ce jeton de renouvellement.
 class FakeTokenStorage implements TokenStorage {
-  FakeTokenStorage([this.token]);
+  FakeTokenStorage([String? refreshToken])
+    : tokens = refreshToken == null
+          ? null
+          : AuthTokens(accessToken: 'ancien', refreshToken: refreshToken);
 
-  String? token;
+  AuthTokens? tokens;
+
+  String? get refreshToken => tokens?.refreshToken;
 
   @override
-  Future<String?> read() async => token;
+  Future<AuthTokens?> read() async => tokens;
 
   @override
-  Future<void> write(String token) async => this.token = token;
+  Future<void> write(AuthTokens tokens) async => this.tokens = tokens;
 
   @override
-  Future<void> delete() async => token = null;
+  Future<void> delete() async => tokens = null;
 }
 
 const awaUser = AppUser(
@@ -191,6 +202,8 @@ const awaUser = AppUser(
 );
 
 // Serveur de comptes simulé : `password` est le seul mot de passe accepté.
+// Chaque session ouverte ou renouvelée reçoit des jetons numérotés
+// (`access-1`/`refresh-1`, …).
 class FakeAuthService implements AuthService {
   FakeAuthService({this.user = awaUser, this.password = 'motdepasse'});
 
@@ -198,12 +211,29 @@ class FakeAuthService implements AuthService {
   final String password;
   Object? meError;
   Object? registerError;
+  Object? refreshError;
+  Object? socialError;
   Completer<void>? gate;
   final List<String> registered = [];
+  final List<String> refreshed = [];
+  final List<String> loggedOut = [];
+  final List<String> googleTokens = [];
+  final List<String> facebookTokens = [];
   int logins = 0;
+  int _issued = 0;
+
+  AuthTokens _nextTokens() {
+    _issued++;
+    return AuthTokens(
+      accessToken: 'access-$_issued',
+      refreshToken: 'refresh-$_issued',
+    );
+  }
+
+  AuthSession _session() => AuthSession(user: user, tokens: _nextTokens());
 
   @override
-  Future<void> register({
+  Future<AuthSession> register({
     required String firstName,
     required String lastName,
     required String email,
@@ -218,10 +248,11 @@ class FakeAuthService implements AuthService {
       firstName: firstName,
       lastName: lastName,
     );
+    return _session();
   }
 
   @override
-  Future<String> login({
+  Future<AuthSession> login({
     required String email,
     required String password,
   }) async {
@@ -234,14 +265,89 @@ class FakeAuthService implements AuthService {
         serverMessage: 'Email ou mot de passe incorrect.',
       );
     }
-    return 'token-$logins';
+    return _session();
   }
+
+  @override
+  Future<AuthSession> loginWithGoogle(String idToken) async {
+    googleTokens.add(idToken);
+    await gate?.future;
+    if (socialError case final e?) throw e;
+    return _session();
+  }
+
+  @override
+  Future<AuthSession> loginWithFacebook(String accessToken) async {
+    facebookTokens.add(accessToken);
+    await gate?.future;
+    if (socialError case final e?) throw e;
+    return _session();
+  }
+
+  @override
+  Future<AuthTokens> refresh(String refreshToken) async {
+    refreshed.add(refreshToken);
+    if (refreshError case final e?) throw e;
+    return _nextTokens();
+  }
+
+  @override
+  Future<void> logout(String refreshToken) async => loggedOut.add(refreshToken);
 
   @override
   Future<AppUser> me() async {
     if (meError case final e?) throw e;
     return user;
   }
+}
+
+// Connexions Google/Facebook simulées : `next` est le credential renvoyé
+// (`null` : annulation), ou `error` est levée.
+class FakeGoogleAuthService implements GoogleAuthService {
+  FakeGoogleAuthService({this.usesGoogleButton = false});
+
+  @override
+  final bool usesGoogleButton;
+  String? next = 'google-id-token';
+  Object? error;
+  int signOuts = 0;
+  final StreamController<String> webTokens = StreamController.broadcast();
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<void> get ready async {}
+
+  @override
+  Future<String?> signIn() async {
+    if (error case final e?) throw e;
+    return next;
+  }
+
+  @override
+  Stream<String> get idTokens => webTokens.stream;
+
+  @override
+  Future<void> signOut() async => signOuts++;
+}
+
+class FakeFacebookAuthService implements FacebookAuthService {
+  String? next = 'facebook-access-token';
+  Object? error;
+  int signOuts = 0;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<String?> signIn() async {
+    if (error case final e?) throw e;
+    return next;
+  }
+
+  @override
+  Future<void> signOut() async => signOuts++;
 }
 
 // QR Codes du compte simulés (en mémoire).
@@ -257,8 +363,11 @@ class FakeQrCodeService implements QrCodeService {
 
   static String publicUrl(int n) => 'https://qr.test/q/slug$n';
 
+  int lists = 0;
+
   @override
   Future<List<SavedQrCode>> list() async {
+    lists++;
     await gate?.future;
     if (error case final e?) throw e;
     return List.of(items);
@@ -318,12 +427,46 @@ class FakeQrCodeService implements QrCodeService {
 
 // Session ouverte (jeton enregistré, reconnu par le serveur simulé) et
 // QR Codes enregistrés en mémoire : l'application démarre sur l'accueil.
+// Cache de « Mes QR Codes » simulé (en mémoire), avec un délai de lecture
+// optionnel (`readGate`).
+class FakeQrHistoryCache implements QrHistoryCache {
+  final Map<String, List<SavedQrCode>> entries = {};
+  Completer<void>? readGate;
+  int clears = 0;
+
+  @override
+  Future<List<SavedQrCode>?> read(String userId) async {
+    await readGate?.future;
+    return entries[userId];
+  }
+
+  @override
+  Future<void> write(String userId, List<SavedQrCode> items) async =>
+      entries[userId] = List.of(items);
+
+  @override
+  Future<void> clear() async {
+    clears++;
+    entries.clear();
+  }
+}
+
 List<Override> signedIn({
   FakeAuthService? auth,
   FakeTokenStorage? storage,
   FakeQrCodeService? qrCodes,
+  FakeGoogleAuthService? google,
+  FakeFacebookAuthService? facebook,
+  FakeQrHistoryCache? historyCache,
 }) => [
-  tokenStorageProvider.overrideWithValue(storage ?? FakeTokenStorage('token')),
+  qrHistoryCacheProvider.overrideWithValue(
+    historyCache ?? FakeQrHistoryCache(),
+  ),
+  if (google != null) googleAuthServiceProvider.overrideWithValue(google),
+  if (facebook != null) facebookAuthServiceProvider.overrideWithValue(facebook),
+  tokenStorageProvider.overrideWithValue(
+    storage ?? FakeTokenStorage('refresh-token'),
+  ),
   authServiceProvider.overrideWithValue(auth ?? FakeAuthService()),
   qrCodeServiceProvider.overrideWithValue(qrCodes ?? FakeQrCodeService()),
 ];

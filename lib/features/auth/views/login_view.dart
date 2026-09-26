@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_router.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_layout.dart';
+import '../widgets/social_sign_in_buttons.dart';
 
 // Connexion. Une fois connecté, le routeur ouvre l'accueil.
 class LoginView extends ConsumerStatefulWidget {
@@ -78,6 +79,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
             ],
           ),
         ),
+        const SocialSignInButtons(),
         const SizedBox(height: 32),
         Text(
           'Pas encore de compte ?',

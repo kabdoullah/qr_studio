@@ -1,10 +1,15 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// Conservation du jeton de session entre deux lancements.
+import '../network/session_token.dart';
+
+part 'token_storage.g.dart';
+
+// Conservation des jetons de session entre deux lancements.
 abstract interface class TokenStorage {
-  Future<String?> read();
-  Future<void> write(String token);
+  // `null` sans jeton de renouvellement : aucune session à restaurer.
+  Future<AuthTokens?> read();
+  Future<void> write(AuthTokens tokens);
   Future<void> delete();
 }
 
@@ -14,20 +19,33 @@ abstract interface class TokenStorage {
 class SecureTokenStorage implements TokenStorage {
   const SecureTokenStorage([this._storage = const FlutterSecureStorage()]);
 
-  static const String _key = 'qr_studio_access_token';
+  static const String _accessKey = 'qr_studio_access_token';
+  static const String _refreshKey = 'qr_studio_refresh_token';
 
   final FlutterSecureStorage _storage;
 
   @override
-  Future<String?> read() => _storage.read(key: _key);
+  Future<AuthTokens?> read() async {
+    final refresh = await _storage.read(key: _refreshKey);
+    // Une ancienne version ne gardait que le jeton d'accès : sans jeton de
+    // renouvellement, l'utilisateur se reconnecte.
+    if (refresh == null || refresh.isEmpty) return null;
+    final access = await _storage.read(key: _accessKey);
+    return AuthTokens(accessToken: access ?? '', refreshToken: refresh);
+  }
 
   @override
-  Future<void> write(String token) => _storage.write(key: _key, value: token);
+  Future<void> write(AuthTokens tokens) async {
+    await _storage.write(key: _refreshKey, value: tokens.refreshToken);
+    await _storage.write(key: _accessKey, value: tokens.accessToken);
+  }
 
   @override
-  Future<void> delete() => _storage.delete(key: _key);
+  Future<void> delete() async {
+    await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _accessKey);
+  }
 }
 
-final tokenStorageProvider = Provider<TokenStorage>(
-  (ref) => const SecureTokenStorage(),
-);
+@Riverpod(keepAlive: true)
+TokenStorage tokenStorage(Ref ref) => const SecureTokenStorage();

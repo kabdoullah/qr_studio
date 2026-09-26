@@ -1,8 +1,10 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../qr_history/viewmodels/qr_history_view_model.dart';
 
 import '../models/business_card_data.dart';
 import '../models/qr_code_data.dart';
@@ -21,8 +23,11 @@ import '../services/qr_code_service.dart';
 import 'qr_content_state.dart';
 import 'qr_generator_view_model.dart';
 
+part 'qr_content_view_model.g.dart';
+
 // Gère la saisie, la validation et la génération du QR Code.
-class QrContentViewModel extends Notifier<QrContentState> {
+@Riverpod(keepAlive: true)
+class QrContentViewModel extends _$QrContentViewModel {
   static const String pickFailedMessage =
       'Impossible de sélectionner le fichier.\nVeuillez réessayer.';
   static const String saveUnavailableMessage =
@@ -345,6 +350,10 @@ class QrContentViewModel extends Notifier<QrContentState> {
               content: content,
             );
       _setSave(const SaveState());
+      // « Mes QR Codes » déjà chargé : la liste connue suit tout de suite.
+      if (ref.exists(qrHistoryViewModelProvider)) {
+        ref.read(qrHistoryViewModelProvider.notifier).upsert(saved);
+      }
       return saved;
     } catch (error, stackTrace) {
       // Jamais le contenu dans les logs (mot de passe Wi-Fi).
@@ -432,11 +441,6 @@ class QrContentViewModel extends Notifier<QrContentState> {
   }
 }
 
-final qrContentViewModelProvider =
-    NotifierProvider<QrContentViewModel, QrContentState>(
-      QrContentViewModel.new,
-    );
-
 // Aperçu affiché pendant la saisie : soit un payload prêt à être rendu,
 // soit un message expliquant pourquoi le QR Code n'est pas encore visible.
 class LivePreview {
@@ -450,7 +454,8 @@ class LivePreview {
 // Aperçu en direct du type sélectionné, ou `null` si ce contenu n'en
 // propose pas (un fichier n'a pas d'URL avant sa mise en ligne). Recalculé uniquement
 // quand le contenu du type affiché change.
-final livePreviewProvider = Provider<LivePreview?>((ref) {
+@Riverpod(keepAlive: true)
+LivePreview? livePreview(Ref ref) {
   const tooLong =
       'Ces informations sont trop longues pour tenir dans un QR Code. '
       'Veuillez raccourcir certains champs.';
@@ -500,4 +505,4 @@ final livePreviewProvider = Provider<LivePreview?>((ref) {
     case QrType.cv || QrType.socialMedia || QrType.website || null:
       return null;
   }
-});
+}

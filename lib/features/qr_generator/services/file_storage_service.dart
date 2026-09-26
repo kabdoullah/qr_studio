@@ -1,8 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
 import '../models/shared_file.dart';
+
+part 'file_storage_service.g.dart';
 
 // Met un fichier en ligne sur le compte connecté. Le serveur est dans
 // `backend/` (FastAPI).
@@ -45,30 +47,29 @@ final class HttpFileStorageService implements FileStorageService {
 
   @override
   Future<RemoteFile> upload(SharedFile file, SharedFileKind kind) async {
-    final endpoint = _api.resolve(switch (kind) {
+    final path = switch (kind) {
       SharedFileKind.cv => 'api/v1/cvs',
       SharedFileKind.businessCardImage => 'api/v1/cards',
-    });
+    };
 
     // Sur mobile, le fichier est lu en flux depuis le disque, sans être
     // chargé en mémoire ; sur le web, son contenu est déjà en mémoire. Le
     // serveur vérifie lui-même le type réel du contenu.
     final bytes = file.bytes;
-    final path = file.localPath;
-    final http.MultipartFile part;
+    final localPath = file.localPath;
+    final MultipartFile part;
     if (bytes != null) {
-      part = http.MultipartFile.fromBytes('file', bytes, filename: file.name);
-    } else if (path != null) {
-      part = await http.MultipartFile.fromPath(
-        'file',
-        path,
-        filename: file.name,
-      );
+      part = MultipartFile.fromBytes(bytes, filename: file.name);
+    } else if (localPath != null) {
+      part = await MultipartFile.fromFile(localPath, filename: file.name);
     } else {
       throw const ApiException(ApiErrorKind.validation);
     }
-    final request = http.MultipartRequest('POST', endpoint)..files.add(part);
-    final body = await _api.send(request, timeout: timeout);
+    final body = await _api.postForm(
+      path,
+      FormData.fromMap({'file': part}),
+      timeout: timeout,
+    );
     if (body case {'id': final String id, 'url': final String url}) {
       final uri = Uri.tryParse(url);
       if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
@@ -79,8 +80,9 @@ final class HttpFileStorageService implements FileStorageService {
   }
 }
 
-final fileStorageServiceProvider = Provider<FileStorageService>((ref) {
+@Riverpod(keepAlive: true)
+FileStorageService fileStorageService(Ref ref) {
   final api = ref.watch(apiClientProvider);
   if (api == null) return const BackendRequiredFileStorageService();
   return HttpFileStorageService(api);
-});
+}

@@ -1,4 +1,4 @@
-package com.example.qr_studio
+package com.qrstudio.app
 
 import io.flutter.embedding.android.FlutterActivity
 

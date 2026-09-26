@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../constants/api_config.dart';
+import 'auth_interceptor.dart';
 import 'session_token.dart';
+
+part 'api_client.g.dart';
 
 // Catégories d'échec d'un appel au serveur, chacune avec son message.
 enum ApiErrorKind {
@@ -56,111 +58,126 @@ class ApiException implements Exception {
   String toString() => 'ApiException(${kind.name}, statut $statusCode)';
 }
 
-// Client HTTP du backend QR Studio : JSON, jeton de session, délais et
-// traduction des erreurs. Toutes les méthodes lèvent `ApiException`.
+// Client HTTP (Dio) du backend QR Studio : JSON, jetons de session
+// (`AuthInterceptor`), délai total et traduction des erreurs. Toutes les
+// méthodes lèvent `ApiException`.
 class ApiClient {
   ApiClient(
     String baseUrl, {
-    required this._readToken,
-    required this._onUnauthorized,
-    http.Client? client,
-  }) : _baseUrl = apiBaseUri(baseUrl),
-       _client = client ?? http.Client();
+    required AuthTokens? Function() readTokens,
+    required void Function(AuthTokens tokens) onTokensRefreshed,
+    required void Function() onUnauthorized,
+    HttpClientAdapter? adapter,
+  }) : _dio = Dio(BaseOptions(baseUrl: apiBaseUri(baseUrl).toString())) {
+    if (adapter != null) _dio.httpClientAdapter = adapter;
+    _dio.interceptors.add(
+      AuthInterceptor(
+        _dio,
+        refreshPath: refreshPath,
+        readTokens: readTokens,
+        onTokensRefreshed: onTokensRefreshed,
+        onUnauthorized: onUnauthorized,
+      ),
+    );
+  }
 
-  // Laisse au serveur gratuit le temps de sortir de veille.
+  // Laisse au serveur gratuit le temps de sortir de veille. Délai total de
+  // la requête (renouvellement de session et nouvel essai compris).
   static const Duration timeout = Duration(seconds: 90);
+  static const String refreshPath = 'api/v1/auth/refresh';
 
-  final Uri _baseUrl;
-  final String? Function() _readToken;
-  final void Function() _onUnauthorized;
-  final http.Client _client;
+  final Dio _dio;
 
-  Uri resolve(String path) => _baseUrl.resolve(path);
-
-  Future<Object?> get(String path) => _json('GET', path);
+  Future<Object?> get(
+    String path, {
+    Map<String, String>? query,
+    bool authenticated = true,
+  }) => _request('GET', path, query: query, authenticated: authenticated);
 
   Future<Object?> post(
     String path,
     Object? body, {
     bool authenticated = true,
-  }) => _json('POST', path, body: body, authenticated: authenticated);
+  }) => _request('POST', path, data: body, authenticated: authenticated);
 
   Future<Object?> put(String path, Object? body) =>
-      _json('PUT', path, body: body);
+      _request('PUT', path, data: body);
 
-  Future<void> delete(String path) => _json('DELETE', path);
+  Future<void> delete(String path) => _request('DELETE', path);
 
-  // Envoi d'une requête construite par l'appelant (fichier multipart).
-  Future<Object?> send(http.BaseRequest request, {Duration? timeout}) async {
-    _authorize(request.headers);
-    return _handle(
-      () async => http.Response.fromStream(
-        await _client.send(request).timeout(timeout ?? ApiClient.timeout),
-      ).timeout(timeout ?? ApiClient.timeout),
-      authenticated: true,
-    );
-  }
+  // Envoi d'un fichier (multipart), toujours authentifié.
+  Future<Object?> postForm(String path, FormData form, {Duration? timeout}) =>
+      _request('POST', path, data: form, timeout: timeout);
 
-  Future<Object?> _json(
+  Future<Object?> _request(
     String method,
     String path, {
-    Object? body,
+    Object? data,
+    Map<String, String>? query,
     bool authenticated = true,
-  }) {
-    final request = http.Request(method, resolve(path));
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
-    }
-    if (authenticated) _authorize(request.headers);
-    return _handle(
-      () async => http.Response.fromStream(
-        await _client.send(request).timeout(timeout),
-      ).timeout(timeout),
-      authenticated: authenticated,
-    );
-  }
-
-  void _authorize(Map<String, String> headers) {
-    final token = _readToken();
-    if (token != null) headers['Authorization'] = 'Bearer $token';
-  }
-
-  Future<Object?> _handle(
-    Future<http.Response> Function() call, {
-    required bool authenticated,
+    Duration? timeout,
   }) async {
-    final http.Response response;
+    final cancel = CancelToken();
     try {
-      response = await call();
-    } on TimeoutException {
-      throw const ApiException(ApiErrorKind.timeout);
-    } on http.ClientException {
-      throw const ApiException(ApiErrorKind.offline);
-    }
-
-    final status = response.statusCode;
-    Object? body;
-    if (response.bodyBytes.isNotEmpty) {
-      try {
-        body = jsonDecode(utf8.decode(response.bodyBytes));
-      } on FormatException {
-        if (status < 400) {
-          throw ApiException(ApiErrorKind.invalidResponse, statusCode: status);
-        }
+      final response = await _dio
+          .request<Object?>(
+            path,
+            data: data,
+            queryParameters: query,
+            cancelToken: cancel,
+            options: Options(
+              method: method,
+              extra: {AuthInterceptor.authenticatedKey: authenticated},
+            ),
+          )
+          .timeout(
+            timeout ?? ApiClient.timeout,
+            onTimeout: () {
+              cancel.cancel();
+              throw const ApiException(ApiErrorKind.timeout);
+            },
+          );
+      final body = response.data;
+      // Réponse qui n'est pas du JSON (page d'erreur d'un proxy…).
+      if (body is String && body.isNotEmpty) {
+        throw ApiException(
+          ApiErrorKind.invalidResponse,
+          statusCode: response.statusCode,
+        );
       }
+      return body;
+    } on DioException catch (error) {
+      throw _toApiException(error);
     }
-    if (status >= 200 && status < 300) return body;
+  }
 
-    // Une session refusée par le serveur est terminée ; une connexion
-    // refusée (mauvais mot de passe) ne l'est pas.
-    if (status == 401 && authenticated) _onUnauthorized();
+  // Seuls le statut et le message `detail` sont gardés : le corps de la
+  // réponse peut contenir des données saisies.
+  static ApiException _toApiException(DioException error) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout ||
+          DioExceptionType.sendTimeout ||
+          DioExceptionType.receiveTimeout ||
+          DioExceptionType.transformTimeout ||
+          DioExceptionType.cancel:
+        return const ApiException(ApiErrorKind.timeout);
+      case DioExceptionType.connectionError || DioExceptionType.badCertificate:
+        return const ApiException(ApiErrorKind.offline);
+      case DioExceptionType.unknown:
+        return error.error is FormatException
+            ? const ApiException(ApiErrorKind.invalidResponse)
+            : const ApiException(ApiErrorKind.offline);
+      case DioExceptionType.badResponse:
+        break;
+    }
+    final status = error.response?.statusCode ?? 0;
+    final body = error.response?.data;
     // Les messages d'erreur du serveur sont rédigés pour l'utilisateur ;
     // les erreurs de validation détaillées (liste) ne le sont pas.
-    final detail = body is Map<String, dynamic> && body['detail'] is String
+    final detail = body is Map && body['detail'] is String
         ? body['detail'] as String
         : null;
-    throw ApiException(
+    return ApiException(
       switch (status) {
         401 => ApiErrorKind.unauthorized,
         403 => ApiErrorKind.forbidden,
@@ -177,11 +194,14 @@ class ApiClient {
 }
 
 // `null` quand l'application est lancée sans adresse de serveur.
-final apiClientProvider = Provider<ApiClient?>((ref) {
+@Riverpod(keepAlive: true)
+ApiClient? apiClient(Ref ref) {
   if (apiBaseUrl.isEmpty) return null;
+  final session = ref.read(sessionTokenProvider.notifier);
   return ApiClient(
     apiBaseUrl,
-    readToken: () => ref.read(sessionTokenProvider),
-    onUnauthorized: () => ref.read(sessionTokenProvider.notifier).clear(),
+    readTokens: () => ref.read(sessionTokenProvider),
+    onTokensRefreshed: session.set,
+    onUnauthorized: session.clear,
   );
-});
+}
