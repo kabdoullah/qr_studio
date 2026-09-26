@@ -46,3 +46,6 @@ app.*.map.json
 
 # Réglages d'éditeur propres à chaque machine
 .vscode/
+
+# Configuration locale (adresse IP du Mac…) : copier config/local.example.json
+config/local.json

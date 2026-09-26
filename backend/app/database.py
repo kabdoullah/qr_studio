@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Tuple
 
-from .config import Settings
+from .config import Settings, psycopg_url
 
 
 class Database:
@@ -31,7 +31,7 @@ def create_database(settings: Settings) -> Database:
 
     import psycopg
 
-    url = settings.database_url
+    url = psycopg_url(settings.database_url)
     # Une connexion par opération, sans requêtes préparées (pooler de Neon).
     return Database(
         lambda: psycopg.connect(url, prepare_threshold=None), placeholder="%s"

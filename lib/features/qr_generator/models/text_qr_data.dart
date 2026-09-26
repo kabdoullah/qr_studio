@@ -6,4 +6,9 @@ class TextQrData {
   static const int maxLength = 1000;
 
   final String text;
+
+  Map<String, Object?> toJson() => {'text': text};
+
+  factory TextQrData.fromJson(Map<String, Object?> json) =>
+      TextQrData(text: json['text'] is String ? json['text'] as String : '');
 }

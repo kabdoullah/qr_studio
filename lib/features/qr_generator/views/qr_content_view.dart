@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
+import '../../../app/theme/app_dimens.dart';
+import '../../../core/widgets/error_message.dart';
+import '../../../core/widgets/loading_button.dart';
 
 import '../models/qr_type.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -14,17 +17,12 @@ import '../widgets/shared_file_picker.dart';
 import '../widgets/qr_live_preview.dart';
 import '../widgets/social_page_form.dart';
 import '../widgets/text_form.dart';
+import '../widgets/website_form.dart';
+import '../widgets/wifi_form.dart';
 
 // Saisie du contenu du QR Code selon le type choisi sur l'accueil.
 class QrContentView extends ConsumerWidget {
   const QrContentView({super.key});
-
-  static const double _maxContentWidth = 560;
-
-  // Au-delà de cette largeur (tablette), l'aperçu s'affiche à côté du
-  // formulaire au lieu d'en dessous.
-  static const double _sideBySideBreakpoint = 840;
-  static const double _previewWidth = 360;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +31,9 @@ class QrContentView extends ConsumerWidget {
       QrType.businessCard => const BusinessCardContent(),
       QrType.text => const TextForm(),
       QrType.cv => const SharedFilePicker(kind: SharedFileKind.cv),
-      QrType.socialPage => const SocialPageForm(),
+      QrType.socialMedia => const SocialPageForm(),
+      QrType.website => const WebsiteForm(),
+      QrType.wifi => const WifiForm(),
       null => const SizedBox.shrink(),
     };
     final hasPreview = ref.watch(
@@ -45,20 +45,20 @@ class QrContentView extends ConsumerWidget {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            if (hasPreview && constraints.maxWidth >= _sideBySideBreakpoint) {
+            if (hasPreview && constraints.maxWidth >= AppLayout.sideBySide) {
               return _SideBySide(content: content);
             }
             return Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+                constraints: const BoxConstraints(maxWidth: AppLayout.form),
                 child: _Scrollable(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       content,
                       if (hasPreview) ...[
-                        const SizedBox(height: 24),
+                        const SizedBox(height: AppSpacing.xl),
                         const QrLivePreview(),
                       ],
                     ],
@@ -69,12 +69,12 @@ class QrContentView extends ConsumerWidget {
           },
         ),
       ),
-      bottomNavigationBar: const _GenerateButton(),
+      bottomNavigationBar: const _GenerateBar(),
     );
   }
 }
 
-// Disposition tablette : formulaire à gauche, aperçu fixe à droite.
+// Disposition large : formulaire à gauche, aperçu fixe à droite.
 class _SideBySide extends StatelessWidget {
   const _SideBySide({required this.content});
 
@@ -82,18 +82,18 @@ class _SideBySide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(
-          maxWidth:
-              QrContentView._maxContentWidth + QrContentView._previewWidth + 64,
+          maxWidth: AppLayout.form + AppLayout.previewWidth + AppSpacing.giant,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: _Scrollable(child: content)),
             const SizedBox(
-              width: QrContentView._previewWidth,
+              width: AppLayout.previewWidth,
               child: _Scrollable(child: QrLivePreview()),
             ),
           ],
@@ -112,71 +112,93 @@ class _Scrollable extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter,
+        AppSpacing.xs,
+        AppSpacing.gutter,
+        AppSpacing.xl,
+      ),
       child: child,
     );
   }
 }
 
-// Isolé pour ne reconstruire que le bouton quand un envoi démarre.
-class _GenerateButton extends ConsumerWidget {
-  const _GenerateButton();
+// Barre du bouton « Générer », fixée en bas. Isolée pour ne reconstruire
+// que le bouton quand un envoi démarre.
+class _GenerateBar extends ConsumerWidget {
+  const _GenerateBar();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final isBusy = ref.watch(
       qrContentViewModelProvider.select(
-        (s) =>
-            s.cv.isBusy ||
-            s.cardImage.isBusy ||
-            s.socialPagePublish.isPublishing,
+        (s) => s.cv.isBusy || s.cardImage.isBusy || s.saving.isSaving,
       ),
     );
     // L'envoi peut prendre plusieurs secondes (serveur en veille) : le
     // bouton explique pourquoi il est indisponible.
     final progressLabel = ref.watch(
       qrContentViewModelProvider.select(
-        (s) => s.socialPagePublish.isPublishing
-            ? 'Publication de la page…'
-            : s.cv.status == FileStatus.uploading ||
-                  s.cardImage.status == FileStatus.uploading
+        (s) =>
+            s.cv.status == FileStatus.uploading ||
+                s.cardImage.status == FileStatus.uploading
             ? 'Envoi du fichier…'
+            : s.saving.isSaving
+            ? 'Enregistrement…'
             : null,
+      ),
+    );
+    final type = ref.watch(qrGeneratorViewModelProvider);
+    final saveError = ref.watch(
+      qrContentViewModelProvider.select(
+        (s) => s.saving.type == type ? s.saving.errorMessage : null,
       ),
     );
 
     Future<void> generate() async {
-      final viewModel = ref.read(qrContentViewModelProvider.notifier);
-      final state = ref.read(qrContentViewModelProvider);
-      // Générer publie la page : l'utilisateur confirme d'abord. Une saisie
-      // invalide est refusée sans confirmation (les erreurs s'affichent).
-      final needsConfirmation =
-          ref.read(qrGeneratorViewModelProvider) == QrType.socialPage &&
-          state.isSocialPageValid;
-      if (needsConfirmation) {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => const SocialPagePublishDialog(),
-        );
-        if (confirmed != true) return;
-      }
-      final result = await viewModel.generateQr();
+      final result = await ref
+          .read(qrContentViewModelProvider.notifier)
+          .generateQr();
       if (result != null && context.mounted) {
         context.push(AppRoutes.result);
       }
     }
 
-    return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: FilledButton.icon(
-        onPressed: isBusy ? null : generate,
-        icon: progressLabel != null
-            ? const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.qr_code_2_rounded),
-        label: Text(progressLabel ?? 'Générer le QR Code'),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(top: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(
+          AppSpacing.gutter,
+          AppSpacing.sm,
+          AppSpacing.gutter,
+          AppSpacing.md,
+        ),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppLayout.form),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (saveError != null) ...[
+                  ErrorMessage(saveError),
+                  const SizedBox(height: AppSpacing.xs),
+                ],
+                LoadingButton(
+                  label: progressLabel ?? 'Générer le QR Code',
+                  isBusy: isBusy,
+                  icon: Icons.qr_code_2_rounded,
+                  onPressed: generate,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

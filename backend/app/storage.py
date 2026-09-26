@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional, Protocol
 
-from .config import Settings
+from .config import Settings, psycopg_url
 
 CHUNK_SIZE = 64 * 1024
 
@@ -25,6 +25,9 @@ class StoredFile:
     filename: str
     content_type: str
     size: int
+    # Compte qui a mis le fichier en ligne ; `None` pour les fichiers
+    # envoyés avant les comptes.
+    owner_id: Optional[str] = None
 
 
 def new_file_id() -> str:
@@ -46,6 +49,12 @@ class FileStore(Protocol):
     def total_bytes(self) -> int:
         """Espace occupé par l'ensemble des fichiers."""
 
+    def delete(self, file_id: str) -> None:
+        """Supprime le fichier (sans erreur s'il n'existe plus)."""
+
+
+_COLUMNS = "id, kind, filename, content_type, size, owner_id"
+
 
 class LocalFileStore:
     def __init__(self, data_dir: Path) -> None:
@@ -65,6 +74,10 @@ class LocalFileStore:
                 )
                 """
             )
+            # Colonne ajoutée avec les comptes (bases existantes).
+            columns = [row[1] for row in db.execute("PRAGMA table_info(files)")]
+            if "owner_id" not in columns:
+                db.execute("ALTER TABLE files ADD COLUMN owner_id TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._db_path)
@@ -76,13 +89,15 @@ class LocalFileStore:
         shutil.move(str(source), self._path(file.id))
         with self._connect() as db:
             db.execute(
-                "INSERT INTO files VALUES (?, ?, ?, ?, ?, ?)",
+                f"INSERT INTO files ({_COLUMNS}, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     file.id,
                     file.kind,
                     file.filename,
                     file.content_type,
                     file.size,
+                    file.owner_id,
                     time.time(),
                 ),
             )
@@ -90,8 +105,7 @@ class LocalFileStore:
     def get(self, file_id: str, kind: str) -> Optional[StoredFile]:
         with self._connect() as db:
             row = db.execute(
-                "SELECT id, kind, filename, content_type, size FROM files"
-                " WHERE id = ? AND kind = ?",
+                f"SELECT {_COLUMNS} FROM files WHERE id = ? AND kind = ?",
                 (file_id, kind),
             ).fetchone()
         return StoredFile(*row) if row else None
@@ -105,12 +119,17 @@ class LocalFileStore:
         with self._connect() as db:
             return db.execute("SELECT COALESCE(SUM(size), 0) FROM files").fetchone()[0]
 
+    def delete(self, file_id: str) -> None:
+        with self._connect() as db:
+            db.execute("DELETE FROM files WHERE id = ?", (file_id,))
+        self._path(file_id).unlink(missing_ok=True)
+
 
 class PostgresFileStore:
     """Fichiers stockés en `bytea` (10 MB maximum chacun)."""
 
     def __init__(self, database_url: str) -> None:
-        self._database_url = database_url
+        self._database_url = psycopg_url(database_url)
         with self._connect() as db:
             db.execute(
                 """
@@ -125,6 +144,8 @@ class PostgresFileStore:
                 )
                 """
             )
+            # Colonne ajoutée avec les comptes (bases existantes).
+            db.execute("ALTER TABLE files ADD COLUMN IF NOT EXISTS owner_id TEXT")
 
     def _connect(self):
         import psycopg
@@ -136,14 +157,15 @@ class PostgresFileStore:
     def save(self, file: StoredFile, source: Path) -> None:
         with self._connect() as db:
             db.execute(
-                "INSERT INTO files (id, kind, filename, content_type, size, data)"
-                " VALUES (%s, %s, %s, %s, %s, %s)",
+                f"INSERT INTO files ({_COLUMNS}, data)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (
                     file.id,
                     file.kind,
                     file.filename,
                     file.content_type,
                     file.size,
+                    file.owner_id,
                     source.read_bytes(),
                 ),
             )
@@ -151,8 +173,7 @@ class PostgresFileStore:
     def get(self, file_id: str, kind: str) -> Optional[StoredFile]:
         with self._connect() as db:
             row = db.execute(
-                "SELECT id, kind, filename, content_type, size FROM files"
-                " WHERE id = %s AND kind = %s",
+                f"SELECT {_COLUMNS} FROM files WHERE id = %s AND kind = %s",
                 (file_id, kind),
             ).fetchone()
         return StoredFile(*row) if row else None
@@ -170,6 +191,10 @@ class PostgresFileStore:
     def total_bytes(self) -> int:
         with self._connect() as db:
             return db.execute("SELECT COALESCE(SUM(size), 0) FROM files").fetchone()[0]
+
+    def delete(self, file_id: str) -> None:
+        with self._connect() as db:
+            db.execute("DELETE FROM files WHERE id = %s", (file_id,))
 
 
 def create_store(settings: Settings) -> FileStore:

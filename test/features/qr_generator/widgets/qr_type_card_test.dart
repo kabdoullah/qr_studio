@@ -18,11 +18,12 @@ void main() {
       ),
     );
 
-    final node = find.bySemanticsLabel('CV\nPartagez votre CV PDF');
+    final label = '${QrType.cv.title}\n${QrType.cv.description}';
+    final node = find.bySemanticsLabel(label);
     expect(
       tester.getSemantics(node),
       matchesSemantics(
-        label: 'CV\nPartagez votre CV PDF',
+        label: label,
         isButton: true,
         hasTapAction: true,
         isFocusable: true,
@@ -30,7 +31,7 @@ void main() {
       ),
     );
 
-    tester.semantics.tap(find.semantics.byLabel('CV\nPartagez votre CV PDF'));
+    tester.semantics.tap(find.semantics.byLabel(label));
     expect(taps, 1);
     semantics.dispose();
   });

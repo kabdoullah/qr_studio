@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 
-import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_dimens.dart';
 import '../models/qr_style.dart';
 
 // Affiche un QR Code à partir de son contenu, sans connaître son type.
@@ -32,7 +32,7 @@ class QrPreview extends StatelessWidget {
               padding: EdgeInsets.all(dimension * 0.06),
               decoration: BoxDecoration(
                 color: style.backgroundColor,
-                borderRadius: BorderRadius.circular(AppTheme.radius),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),

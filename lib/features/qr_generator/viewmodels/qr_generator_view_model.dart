@@ -1,9 +1,12 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/qr_type.dart';
 
+part 'qr_generator_view_model.g.dart';
+
 // Mémorise le type de QR Code choisi sur l'écran d'accueil.
-class QrGeneratorViewModel extends Notifier<QrType?> {
+@Riverpod(keepAlive: true)
+class QrGeneratorViewModel extends _$QrGeneratorViewModel {
   @override
   QrType? build() => null;
 
@@ -11,6 +14,3 @@ class QrGeneratorViewModel extends Notifier<QrType?> {
 
   void reset() => state = null;
 }
-
-final qrGeneratorViewModelProvider =
-    NotifierProvider<QrGeneratorViewModel, QrType?>(QrGeneratorViewModel.new);

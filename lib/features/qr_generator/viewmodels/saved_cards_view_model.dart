@@ -1,14 +1,21 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/network/api_client.dart';
+import '../../../core/utils/no_retry.dart';
 import '../models/business_card_data.dart';
 import '../services/business_card_directory_service.dart';
 import 'qr_content_state.dart';
 
-// Liste et recherche des cartes partagées.
-class SavedCardsViewModel extends AsyncNotifier<List<SavedBusinessCard>> {
+part 'saved_cards_view_model.g.dart';
+
+// Liste et recherche des cartes partagées. Recréé à chaque ouverture de
+// l'écran ; pas de nouvel essai automatique : l'utilisateur voit l'erreur
+// et choisit de réessayer.
+@Riverpod(retry: noRetry)
+class SavedCardsViewModel extends _$SavedCardsViewModel {
   static const String loadFailedMessage =
       'Impossible de charger les cartes.\nVérifiez votre connexion.';
 
@@ -58,17 +65,10 @@ class SavedCardsViewModel extends AsyncNotifier<List<SavedBusinessCard>> {
   }
 }
 
-// Recréé à chaque ouverture de l'écran. Pas de nouvel essai automatique :
-// l'utilisateur voit l'erreur et choisit de réessayer.
-final savedCardsProvider =
-    AsyncNotifierProvider.autoDispose<
-      SavedCardsViewModel,
-      List<SavedBusinessCard>
-    >(SavedCardsViewModel.new, retry: (retryCount, error) => null);
-
 // Publication d'une carte dans l'annuaire partagé. L'état indique si une
 // publication est en cours.
-class CardPublishViewModel extends Notifier<bool> {
+@Riverpod(keepAlive: true)
+class CardPublishViewModel extends _$CardPublishViewModel {
   static const String publishedMessage =
       'Carte enregistrée. Elle est maintenant visible par tous.';
   static const String invalidMessage =
@@ -100,13 +100,10 @@ class CardPublishViewModel extends Notifier<bool> {
         stackTrace: stackTrace,
       );
       final tooMany =
-          error is BusinessCardDirectoryException && error.statusCode == 429;
+          error is ApiException && error.kind == ApiErrorKind.tooManyRequests;
       return tooMany ? tooManyMessage : failedMessage;
     } finally {
       if (ref.mounted) state = false;
     }
   }
 }
-
-final cardPublishViewModelProvider =
-    NotifierProvider<CardPublishViewModel, bool>(CardPublishViewModel.new);

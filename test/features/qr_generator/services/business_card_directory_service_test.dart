@@ -2,25 +2,27 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+import 'package:qr_studio/core/network/api_client.dart';
 import 'package:qr_studio/features/qr_generator/models/business_card_data.dart';
 import 'package:qr_studio/features/qr_generator/services/business_card_directory_service.dart';
 
+import '../../../helpers/fake_http_adapter.dart';
+
 void main() {
-  late List<http.Request> requests;
+  late List<RecordedRequest> requests;
 
   BusinessCardDirectoryService serviceReplying(int status, Object body) {
-    requests = [];
-    final client = MockClient((request) async {
-      requests.add(request);
-      return http.Response.bytes(
-        utf8.encode(jsonEncode(body)),
-        status,
-        headers: {'content-type': 'application/json'},
-      );
-    });
-    return BusinessCardDirectoryService('https://api.test', client: client);
+    final adapter = FakeHttpAdapter((_) async => jsonResponse(status, body));
+    requests = adapter.requests;
+    return BusinessCardDirectoryService(
+      ApiClient(
+        'https://api.test',
+        readTokens: () => null,
+        onTokensRefreshed: (_) {},
+        onUnauthorized: () {},
+        adapter: adapter,
+      ),
+    );
   }
 
   const awaJson = {
@@ -48,7 +50,7 @@ void main() {
     final cards = await service.search('  lagune ');
 
     expect(
-      requests.single.url.toString(),
+      requests.single.uri.toString(),
       'https://api.test/api/v1/business-cards?q=lagune',
     );
     final card = cards.single;
@@ -65,7 +67,7 @@ void main() {
 
     await service.search('');
 
-    expect(requests.single.url.hasQuery, isFalse);
+    expect(requests.single.uri.hasQuery, isFalse);
   });
 
   test('publie la carte en JSON avec les noms de champs de l’API', () async {
@@ -82,7 +84,7 @@ void main() {
 
     final request = requests.single;
     expect(request.method, 'POST');
-    expect(request.url.path, '/api/v1/business-cards');
+    expect(request.uri.path, '/api/v1/business-cards');
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     expect(body, hasLength(13));
     expect(body['first_name'], 'Awa');
@@ -91,16 +93,24 @@ void main() {
     expect(saved.id, 'AwaAwaAwaAwaAwa1');
   });
 
-  test('un statut d’erreur conserve le code HTTP', () async {
+  test('annuaire public : aucune session envoyée', () async {
+    final service = serviceReplying(200, {'items': []});
+
+    await service.search('');
+
+    expect(requests.single.header('Authorization'), isNull);
+  });
+
+  test('un statut d’erreur garde sa catégorie', () async {
     final service = serviceReplying(429, {'detail': 'Trop d’envois'});
 
     await expectLater(
       service.publish(const BusinessCardData(firstName: 'A', lastName: 'B')),
       throwsA(
-        isA<BusinessCardDirectoryException>().having(
-          (e) => e.statusCode,
-          'statusCode',
-          429,
+        isA<ApiException>().having(
+          (e) => e.kind,
+          'kind',
+          ApiErrorKind.tooManyRequests,
         ),
       ),
     );
@@ -117,7 +127,7 @@ void main() {
     ]) {
       await expectLater(
         serviceReplying(200, body).search(''),
-        throwsA(isA<BusinessCardDirectoryException>()),
+        throwsA(isA<ApiException>()),
       );
     }
   });

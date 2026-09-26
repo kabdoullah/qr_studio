@@ -6,9 +6,13 @@ import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/views/qr_content_view.dart';
 import 'package:qr_studio/features/qr_generator/widgets/qr_type_card.dart';
 
+import '../../../helpers/fake_services.dart';
+
 void main() {
   Future<void> pumpApp(WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: QrStudioApp()));
+    await tester.pumpWidget(
+      ProviderScope(overrides: signedIn(), child: const QrStudioApp()),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -18,7 +22,7 @@ void main() {
     await pumpApp(tester);
 
     expect(
-      find.text('Créez votre QR Code\nsimplement et rapidement.'),
+      find.text('Créez votre QR Code\nen quelques secondes.'),
       findsOneWidget,
     );
     expect(find.byType(QrTypeCard), findsNWidgets(QrType.values.length));

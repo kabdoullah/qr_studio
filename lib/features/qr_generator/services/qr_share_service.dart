@@ -3,8 +3,10 @@ import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:share_plus/share_plus.dart';
+
+part 'qr_share_service.g.dart';
 
 // Partage et enregistrement de l'image du QR Code.
 class QrShareService {
@@ -69,6 +71,5 @@ class QrShareService {
   }
 }
 
-final qrShareServiceProvider = Provider<QrShareService>(
-  (ref) => const QrShareService(),
-);
+@Riverpod(keepAlive: true)
+QrShareService qrShareService(Ref ref) => const QrShareService();

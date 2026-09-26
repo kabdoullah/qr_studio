@@ -3,16 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
+import '../../../app/theme/app_dimens.dart';
+import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/loading_button.dart';
 import '../models/qr_code_data.dart';
 import '../viewmodels/qr_content_view_model.dart';
 import '../viewmodels/qr_result_view_model.dart';
 import '../widgets/qr_preview.dart';
+import '../widgets/qr_preview_card.dart';
 
-// Écran final : le QR Code généré et les actions possibles.
+// Écran final : le QR Code généré, mis en valeur, et les actions possibles.
 class QrResultView extends ConsumerWidget {
   const QrResultView({super.key});
-
-  static const double _maxContentWidth = 480;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,31 +32,43 @@ class QrResultView extends ConsumerWidget {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.gutter,
+              0,
+              AppSpacing.gutter,
+              AppSpacing.xl,
+            ),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              constraints: const BoxConstraints(maxWidth: AppLayout.narrow),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const _SuccessBadge(),
+                  const SizedBox(height: AppSpacing.md),
                   Semantics(
                     header: true,
                     child: Text(
                       result.type.readyMessage,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium,
+                      style: theme.textTheme.headlineSmall,
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  QrPreview(data: result.payload, style: result.style),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
-                    result.file?.name ?? result.type.title,
+                    'Scannez-le, partagez-le ou téléchargez-le.',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  QrPreviewCard(
+                    title: result.file?.name ?? result.type.title,
+                    child: QrPreview(data: result.payload, style: result.style),
                   ),
                   // Lien encodé, pour un contenu en ligne.
                   if (result.isOnlineLink) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.sm),
                     SelectableText(
                       result.payload,
                       textAlign: TextAlign.center,
@@ -63,21 +77,22 @@ class QrResultView extends ConsumerWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 32),
+                  const SizedBox(height: AppSpacing.xl),
                   _ExportButtons(result: result),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.sm),
                   OutlinedButton.icon(
                     onPressed: () => context.pop(),
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Modifier'),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(
+                  const SizedBox(height: AppSpacing.xs),
+                  TextButton.icon(
                     onPressed: () {
                       context.go(AppRoutes.home);
                       ref.read(qrContentViewModelProvider.notifier).startOver();
                     },
-                    child: const Text('Créer un nouveau QR Code'),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Créer un nouveau QR Code'),
                   ),
                 ],
               ),
@@ -89,7 +104,41 @@ class QrResultView extends ConsumerWidget {
   }
 }
 
-// Boutons « Télécharger » et « Partager ». Isolés pour que seul ce bloc se
+// Coche de succès, qui apparaît brièvement (fondu et zoom).
+class _SuccessBadge extends StatelessWidget {
+  const _SuccessBadge();
+
+  static const double _size = 56;
+
+  @override
+  Widget build(BuildContext context) {
+    final success = AppStatusColors.of(context).success;
+    return ExcludeSemantics(
+      child: Center(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: AppDurations.normal,
+          curve: Curves.easeOutBack,
+          builder: (context, value, child) => Opacity(
+            opacity: value.clamp(0, 1),
+            child: Transform.scale(scale: 0.6 + 0.4 * value, child: child),
+          ),
+          child: Container(
+            width: _size,
+            height: _size,
+            decoration: BoxDecoration(
+              color: success.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.check_rounded, size: 32, color: success),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Boutons « Partager » (action principale) et « Télécharger ». Isolés pour que seul ce bloc se
 // reconstruise pendant l'export.
 class _ExportButtons extends ConsumerWidget {
   const _ExportButtons({required this.result});
@@ -108,24 +157,12 @@ class _ExportButtons extends ConsumerWidget {
         ..showSnackBar(SnackBar(content: Text(message)));
     }
 
-    Widget icon(QrResultAction action, IconData data) => pending == action
-        ? const SizedBox.square(
-            dimension: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-        : Icon(data);
+    Widget icon(QrResultAction action, IconData data) =>
+        pending == action ? const ButtonSpinner() : Icon(data);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FilledButton.tonalIcon(
-          onPressed: pending != null
-              ? null
-              : () async => showMessage(await viewModel.download(result)),
-          icon: icon(QrResultAction.download, Icons.download_rounded),
-          label: const Text('Télécharger'),
-        ),
-        const SizedBox(height: 12),
         // Builder : fournit la position du bouton pour la feuille de
         // partage sur iPad.
         Builder(
@@ -142,6 +179,14 @@ class _ExportButtons extends ConsumerWidget {
             icon: icon(QrResultAction.share, Icons.ios_share_rounded),
             label: const Text('Partager'),
           ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: pending != null
+              ? null
+              : () async => showMessage(await viewModel.download(result)),
+          icon: icon(QrResultAction.download, Icons.download_rounded),
+          label: const Text('Télécharger'),
         ),
       ],
     );

@@ -5,6 +5,8 @@ import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_state.dart
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_view_model.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_generator_view_model.dart';
 
+import '../../../helpers/fake_services.dart';
+
 void main() {
   late ProviderContainer container;
 
@@ -13,7 +15,7 @@ void main() {
   QrContentState state() => container.read(qrContentViewModelProvider);
 
   setUp(() {
-    container = ProviderContainer();
+    container = ProviderContainer(overrides: signedIn());
     container
         .read(qrGeneratorViewModelProvider.notifier)
         .selectQrType(QrType.businessCard);

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 // Réseaux proposés sur une page de réseaux sociaux. `name` est la clé
-// envoyée au serveur, qui n'accepte pour chaque réseau que ses domaines.
+// envoyée au serveur (`platform`), qui n'accepte pour chaque réseau que
+// ses domaines. Ajouter un réseau : une valeur ici et une entrée dans
+// `backend/app/social_networks.py`.
 enum SocialNetwork {
   instagram(
     label: 'Instagram',
@@ -24,7 +26,7 @@ enum SocialNetwork {
     profileBase: 'https://www.facebook.com/',
     domains: ['facebook.com', 'fb.com'],
   ),
-  x(
+  twitter(
     label: 'X (Twitter)',
     icon: Icons.alternate_email,
     hint: '@votre_compte',
@@ -65,6 +67,13 @@ enum SocialNetwork {
     profileBase: 'https://t.me/',
     domains: ['t.me'],
   ),
+  github(
+    label: 'GitHub',
+    icon: Icons.code_rounded,
+    hint: 'Identifiant GitHub',
+    profileBase: 'https://github.com/',
+    domains: ['github.com'],
+  ),
   website(
     label: 'Site web',
     icon: Icons.language,
@@ -94,7 +103,7 @@ enum SocialNetwork {
   final List<String>? domains;
 
   // Longueur maximale d'une adresse acceptée par le serveur.
-  static const int maxUrlLength = 300;
+  static const int maxUrlLength = 500;
 
   String get invalidMessage => switch (this) {
     whatsapp => 'Numéro WhatsApp invalide.',

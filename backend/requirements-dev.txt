@@ -1,5 +1,4 @@
 -r requirements.txt
 pytest>=8
-httpx>=0.27
 # Serveur PostgreSQL embarqué, pour tester sur une vraie base.
 pgserver>=0.1.4

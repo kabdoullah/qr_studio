@@ -10,7 +10,8 @@ void main() {
       );
       expect(SocialNetwork.tiktok.toUrl('awa'), 'https://www.tiktok.com/@awa');
       expect(SocialNetwork.telegram.toUrl('@awa'), 'https://t.me/awa');
-      expect(SocialNetwork.x.toUrl('awa_ci'), 'https://x.com/awa_ci');
+      expect(SocialNetwork.twitter.toUrl('awa_ci'), 'https://x.com/awa_ci');
+      expect(SocialNetwork.github.toUrl('awa'), 'https://github.com/awa');
     });
 
     test('accepte un lien complet ou sans protocole', () {
@@ -23,7 +24,7 @@ void main() {
         'https://youtu.be/abc',
       );
       expect(
-        SocialNetwork.x.toUrl('https://twitter.com/awa'),
+        SocialNetwork.twitter.toUrl('https://twitter.com/awa'),
         'https://twitter.com/awa',
       );
     });
@@ -70,7 +71,7 @@ void main() {
       expect(SocialNetwork.website.toUrl('javascript://alert(1)'), isNull);
       expect(SocialNetwork.website.toUrl('ftp://awa.design'), isNull);
       expect(SocialNetwork.website.toUrl('localhost'), isNull);
-      expect(SocialNetwork.website.toUrl('awa.design/${'a' * 300}'), isNull);
+      expect(SocialNetwork.website.toUrl('awa.design/${'a' * 500}'), isNull);
     });
   });
 

@@ -61,6 +61,43 @@ class BusinessCardData {
       whatsapp: whatsapp ?? this.whatsapp,
     );
   }
+
+  // Champs de l'API, en snake_case (voir `backend/app/cards.py`).
+  Map<String, String> toJson() => {
+    'first_name': firstName.trim(),
+    'last_name': lastName.trim(),
+    'job_title': jobTitle.trim(),
+    'company': company.trim(),
+    'phone': phone.trim(),
+    'email': email.trim(),
+    'website': website.trim(),
+    'address': address.trim(),
+    'city': city.trim(),
+    'country': country.trim(),
+    'linkedin': linkedin.trim(),
+    'instagram': instagram.trim(),
+    'whatsapp': whatsapp.trim(),
+  };
+
+  factory BusinessCardData.fromJson(Map<String, Object?> json) {
+    String field(String name) =>
+        json[name] is String ? json[name] as String : '';
+    return BusinessCardData(
+      firstName: field('first_name'),
+      lastName: field('last_name'),
+      jobTitle: field('job_title'),
+      company: field('company'),
+      phone: field('phone'),
+      email: field('email'),
+      website: field('website'),
+      address: field('address'),
+      city: field('city'),
+      country: field('country'),
+      linkedin: field('linkedin'),
+      instagram: field('instagram'),
+      whatsapp: field('whatsapp'),
+    );
+  }
 }
 
 // Carte publiée dans l'annuaire partagé, visible par tous les utilisateurs.

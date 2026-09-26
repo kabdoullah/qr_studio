@@ -22,6 +22,7 @@ void main() {
     directory = FakeBusinessCardDirectory([jeanCard, awaCard]);
     container = ProviderContainer(
       overrides: [
+        ...signedIn(),
         if (withServer)
           businessCardDirectoryProvider.overrideWithValue(directory),
       ],
@@ -202,7 +203,10 @@ void main() {
 
     directory = FakeBusinessCardDirectory([jeanCard, awaCard]);
     container = ProviderContainer(
-      overrides: [businessCardDirectoryProvider.overrideWithValue(directory)],
+      overrides: [
+        ...signedIn(),
+        businessCardDirectoryProvider.overrideWithValue(directory),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(

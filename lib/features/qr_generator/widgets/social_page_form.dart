@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/widgets/error_message.dart';
+import '../../../core/widgets/section_header.dart';
+import '../../../core/widgets/icon_badge.dart';
 import '../models/qr_type.dart';
 import '../models/social_network.dart';
 import '../models/social_page_data.dart';
@@ -55,12 +56,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
     );
     final showAllErrors = ref.watch(
       qrContentViewModelProvider.select(
-        (s) => s.showErrorsFor.contains(QrType.socialPage),
-      ),
-    );
-    final publishError = ref.watch(
-      qrContentViewModelProvider.select(
-        (s) => s.socialPagePublish.errorMessage,
+        (s) => s.showErrorsFor.contains(QrType.socialMedia),
       ),
     );
     final viewModel = ref.read(qrContentViewModelProvider.notifier);
@@ -77,12 +73,15 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionTitle('Votre page'),
+          const SectionHeader(
+            'Votre page',
+            description: 'Partagez tous vos réseaux avec un seul QR Code.',
+          ),
           TextFormField(
             initialValue: page.title,
             decoration: const InputDecoration(
               labelText: 'Titre *',
-              hintText: 'Votre nom ou celui de votre marque',
+              hintText: 'Mes réseaux sociaux',
             ),
             maxLength: SocialPageData.maxTitleLength,
             textInputAction: TextInputAction.next,
@@ -97,7 +96,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
             initialValue: page.bio,
             decoration: const InputDecoration(
               labelText: 'Description',
-              hintText: 'Quelques mots sur vous',
+              hintText: 'Retrouvez-moi…',
               alignLabelWithHint: true,
             ),
             minLines: 2,
@@ -110,9 +109,10 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
             validator: (v) => QrContentState.validateSocialBio(v ?? ''),
             scrollPadding: const EdgeInsets.only(bottom: 120),
           ),
-          _SectionTitle(
-            'Vos réseaux',
+          SectionHeader(
+            'Mes réseaux',
             subtitle: '${links.length} / ${SocialPageData.maxLinks}',
+            divider: true,
           ),
           for (final (index, link) in links.indexed)
             _LinkField(
@@ -145,15 +145,12 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Votre page sera publique pour toute personne ayant le QR Code.',
+            'Votre page sera publique pour toute personne ayant le QR Code. '
+            'Vous pourrez la modifier ou la supprimer depuis « Mes QR Codes ».',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          if (publishError != null) ...[
-            const SizedBox(height: 16),
-            ErrorMessage(publishError),
-          ],
         ],
       ),
     );
@@ -222,78 +219,23 @@ class _NetworkSheet extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text(
-              'Ajouter un réseau',
-              style: Theme.of(context).textTheme.titleMedium,
+            child: Semantics(
+              header: true,
+              child: Text(
+                'Ajouter un réseau',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
           ),
           for (final network in SocialNetwork.values)
             ListTile(
-              leading: Icon(network.icon),
+              leading: IconBadge(network.icon, size: 40),
               title: Text(network.label),
-              minTileHeight: 56,
+              minTileHeight: 64,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               onTap: () => Navigator.of(context).pop(network),
             ),
         ],
-      ),
-    );
-  }
-}
-
-// Confirmation affichée avant la publication : la page devient publique.
-class SocialPagePublishDialog extends StatelessWidget {
-  const SocialPagePublishDialog({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Publier votre page ?'),
-      content: const Text(
-        'Cette page sera publique pour toute personne ayant le QR Code. '
-        "Elle ne pourra pas être supprimée depuis l'application.",
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Publier'),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.subtitle});
-
-  final String title;
-  final String? subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 12),
-      child: Semantics(
-        header: true,
-        child: Text.rich(
-          TextSpan(
-            text: title,
-            style: theme.textTheme.titleMedium,
-            children: [
-              if (subtitle != null)
-                TextSpan(
-                  text: '  ·  $subtitle',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-        ),
       ),
     );
   }

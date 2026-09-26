@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_studio/core/network/api_client.dart';
 import 'package:qr_studio/features/qr_generator/models/business_card_data.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/services/business_card_directory_service.dart';
@@ -26,13 +27,13 @@ void main() {
 
   // Garde le provider (autoDispose) actif pendant le test.
   ProviderSubscription<AsyncValue<List<SavedBusinessCard>>> listen() =>
-      container.listen(savedCardsProvider, (_, _) {});
+      container.listen(savedCardsViewModelProvider, (_, _) {});
 
   group('liste des cartes', () {
     test('charge toutes les cartes à l’ouverture', () async {
       listen();
 
-      final cards = await container.read(savedCardsProvider.future);
+      final cards = await container.read(savedCardsViewModelProvider.future);
 
       expect(cards, [jeanCard, awaCard]);
       expect(directory.queries, ['']);
@@ -40,8 +41,8 @@ void main() {
 
     test('la recherche attend la fin de la frappe', () async {
       listen();
-      await container.read(savedCardsProvider.future);
-      final viewModel = container.read(savedCardsProvider.notifier);
+      await container.read(savedCardsViewModelProvider.future);
+      final viewModel = container.read(savedCardsViewModelProvider.notifier);
 
       viewModel
         ..updateQuery('a')
@@ -52,7 +53,7 @@ void main() {
       );
 
       expect(directory.queries, ['', 'awa']);
-      expect(container.read(savedCardsProvider).value, [awaCard]);
+      expect(container.read(savedCardsViewModelProvider).value, [awaCard]);
     });
 
     test('une erreur est affichée sans nouvel essai automatique', () async {
@@ -60,12 +61,12 @@ void main() {
       listen();
 
       await expectLater(
-        container.read(savedCardsProvider.future),
+        container.read(savedCardsViewModelProvider.future),
         throwsA(isA<Exception>()),
       );
       await Future<void>.delayed(const Duration(milliseconds: 300));
 
-      expect(container.read(savedCardsProvider).hasError, isTrue);
+      expect(container.read(savedCardsViewModelProvider).hasError, isTrue);
       expect(directory.queries, hasLength(1));
     });
 
@@ -73,19 +74,19 @@ void main() {
       directory.error = Exception('hors ligne');
       listen();
       await container
-          .read(savedCardsProvider.future)
+          .read(savedCardsViewModelProvider.future)
           .catchError((_) => <SavedBusinessCard>[]);
 
       directory.error = null;
-      await container.read(savedCardsProvider.notifier).retry();
+      await container.read(savedCardsViewModelProvider.notifier).retry();
 
-      expect(container.read(savedCardsProvider).value, hasLength(2));
+      expect(container.read(savedCardsViewModelProvider).value, hasLength(2));
     });
 
     test('une réponse périmée ne remplace pas la plus récente', () async {
       listen();
-      await container.read(savedCardsProvider.future);
-      final viewModel = container.read(savedCardsProvider.notifier);
+      await container.read(savedCardsViewModelProvider.future);
+      final viewModel = container.read(savedCardsViewModelProvider.notifier);
 
       // La recherche « jean » répond après la recherche « awa ».
       directory.gate = Completer<void>();
@@ -98,14 +99,14 @@ void main() {
       await Future<void>.delayed(
         SavedCardsViewModel.searchDelay + const Duration(milliseconds: 20),
       );
-      expect(container.read(savedCardsProvider).value, [awaCard]);
+      expect(container.read(savedCardsViewModelProvider).value, [awaCard]);
 
       // Libère l'ancienne requête : son résultat est ignoré.
       final stale = directory.gate;
       stale?.complete();
       await Future<void>.delayed(Duration.zero);
 
-      expect(container.read(savedCardsProvider).value, [awaCard]);
+      expect(container.read(savedCardsViewModelProvider).value, [awaCard]);
     });
   });
 
@@ -131,8 +132,8 @@ void main() {
     });
 
     test('explique la limite d’envois', () async {
-      directory.error = const BusinessCardDirectoryException(
-        'x',
+      directory.error = const ApiException(
+        ApiErrorKind.tooManyRequests,
         statusCode: 429,
       );
 

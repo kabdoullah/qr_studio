@@ -1,12 +1,17 @@
 import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../models/business_card_data.dart';
 import '../models/qr_style.dart';
+import '../models/qr_type.dart';
+import '../models/saved_qr_code.dart';
 import '../models/social_network.dart';
 import '../models/text_qr_data.dart';
+import '../models/wifi_qr_data.dart';
+
+part 'qr_service.g.dart';
 
 // Construit le contenu textuel (payload) encodé dans les QR Codes.
 class QrService {
@@ -51,11 +56,48 @@ class QrService {
   }
 
   // Le QR Code d'un contenu en ligne (CV, image de carte de visite, page de
-  // réseaux sociaux) contient uniquement son URL publique.
+  // réseaux sociaux, site web) contient uniquement son URL publique.
   String generateLinkPayload(String remoteUrl) => remoteUrl.trim();
+
+  // Réseaux sociaux et site web : l'adresse publique QR Studio
+  // (`/q/{slug}`), jamais les liens eux-mêmes, pour pouvoir les modifier
+  // sans réimprimer le QR Code.
+  String generateSocialMediaPayload(String publicUrl) =>
+      generateLinkPayload(publicUrl);
+
+  String generateWebsitePayload(String publicUrl) =>
+      generateLinkPayload(publicUrl);
 
   // Le texte est encodé tel quel, sans modification.
   String generateTextPayload(TextQrData data) => data.text;
+
+  // Format standard reconnu par les appareils photo Android et iOS :
+  // `WIFI:T:WPA;S:MonWifi;P:motdepasse;H:true;;`. Le mot de passe n'est
+  // utilisé que pour construire ce texte.
+  String generateWifiPayload(WifiQrData data) {
+    final security = data.security;
+    return [
+      'WIFI:',
+      'T:${security.qrCode};',
+      'S:${_escapeWifi(data.ssid)};',
+      if (security.needsPassword) 'P:${_escapeWifi(data.password)};',
+      if (data.hidden) 'H:true;',
+      ';',
+    ].join();
+  }
+
+  // Payload d'un QR Code enregistré, identique à celui de sa création.
+  String generateSavedPayload(SavedQrCode saved) {
+    return switch (saved.type) {
+      QrType.text => generateTextPayload(TextQrData.fromJson(saved.content)),
+      QrType.wifi => generateWifiPayload(WifiQrData.fromJson(saved.content)),
+      QrType.businessCard when saved.content['mode'] == 'details' =>
+        generateBusinessCardPayload(
+          BusinessCardData.fromJson(saved.section('details')),
+        ),
+      _ => generateLinkPayload(saved.publicUrl),
+    };
+  }
 
   // Capacité maximale en octets (mode binaire, version 40) par niveau de
   // correction d'erreur. Les modes numérique et alphanumérique ont une
@@ -81,6 +123,10 @@ class QrService {
   static List<String> _uriLine(String property, String? uri) =>
       uri == null ? const [] : ['$property:$uri'];
 
+  // Échappe les caractères réservés du format Wi-Fi : \ ; , : "
+  static String _escapeWifi(String value) =>
+      value.replaceAllMapped(RegExp(r'[\\;,:"]'), (m) => '\\${m[0]}');
+
   // Échappe les caractères réservés des valeurs texte vCard (RFC 2426 §4).
   static String _escape(String value) => value
       .replaceAll(r'\', r'\\')
@@ -89,4 +135,5 @@ class QrService {
       .replaceAll(RegExp(r'\r\n|\r|\n'), r'\n');
 }
 
-final qrServiceProvider = Provider<QrService>((ref) => const QrService());
+@Riverpod(keepAlive: true)
+QrService qrService(Ref ref) => const QrService();

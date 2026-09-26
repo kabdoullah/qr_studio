@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../models/qr_code_data.dart';
+
+part 'qr_export_service.g.dart';
 
 // Rendu du QR Code en image PNG.
 class QrExportService {
@@ -30,6 +32,5 @@ class QrExportService {
   }
 }
 
-final qrExportServiceProvider = Provider<QrExportService>(
-  (ref) => const QrExportService(),
-);
+@Riverpod(keepAlive: true)
+QrExportService qrExportService(Ref ref) => const QrExportService();

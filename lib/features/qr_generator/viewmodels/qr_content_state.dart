@@ -5,8 +5,11 @@ import '../models/qr_code_data.dart';
 import '../models/qr_type.dart';
 import '../models/shared_file.dart';
 import '../models/social_network.dart';
+import '../models/saved_qr_code.dart';
 import '../models/social_page_data.dart';
 import '../models/text_qr_data.dart';
+import '../models/website_qr_data.dart';
+import '../models/wifi_qr_data.dart';
 import '../services/qr_service.dart';
 
 // Étapes du partage d'un fichier par lien (CV, image de carte de visite).
@@ -35,13 +38,14 @@ class FileState {
       FileState(status: status, file: file, errorMessage: message);
 }
 
-// Publication de la page de réseaux sociaux : en cours, ou message
-// d'erreur de la dernière tentative.
-class PublishState {
-  const PublishState({this.isPublishing = false, this.errorMessage});
+// Enregistrement du QR Code sur le compte : en cours, ou message d'erreur
+// de la dernière tentative (pour le type `type`).
+class SaveState {
+  const SaveState({this.isSaving = false, this.errorMessage, this.type});
 
-  final bool isPublishing;
+  final bool isSaving;
   final String? errorMessage;
+  final QrType? type;
 }
 
 // Contenu de la carte de visite : coordonnées encodées en vCard, ou image
@@ -59,7 +63,10 @@ class QrContentState {
     this.cv = const FileState(),
     this.cardImage = const FileState(),
     this.socialPage = const SocialPageData(),
-    this.socialPagePublish = const PublishState(),
+    this.website = const WebsiteQrData(),
+    this.wifi = const WifiQrData(),
+    this.saving = const SaveState(),
+    this.editing,
     this.showErrorsFor = const {},
     this.failedGenerations = 0,
     this.result,
@@ -75,7 +82,13 @@ class QrContentState {
   final FileState cv;
   final FileState cardImage;
   final SocialPageData socialPage;
-  final PublishState socialPagePublish;
+  final WebsiteQrData website;
+  final WifiQrData wifi;
+  final SaveState saving;
+
+  // QR Code enregistré en cours de modification : générer le met à jour
+  // (même adresse publique) au lieu d'en créer un nouveau.
+  final SavedQrCode? editing;
 
   // Types pour lesquels une génération a échoué : leurs erreurs
   // s'affichent toutes, y compris sur les champs jamais touchés. Les autres
@@ -147,6 +160,60 @@ class QrContentState {
   static String? validateSocialLinks(List<SocialLink> links) =>
       links.isEmpty ? 'Ajoutez au moins un réseau.' : null;
 
+  static String? validateWebsiteTitle(String value) =>
+      value.trim().length > WebsiteQrData.maxTitleLength
+      ? 'Le titre ne doit pas dépasser '
+            '${WebsiteQrData.maxTitleLength} caractères.'
+      : null;
+
+  // Même règle que le serveur : adresse web complète, en https (http est
+  // refusé en production).
+  static String? validateWebsiteUrl(String value) {
+    if (value.trim().isEmpty) return "Veuillez saisir l'adresse du site.";
+    final url = WebsiteQrData.normalizeUrl(value);
+    final uri = Uri.tryParse(url);
+    final valid =
+        uri != null &&
+        (uri.isScheme('https') || uri.isScheme('http')) &&
+        uri.host.contains('.') &&
+        uri.userInfo.isEmpty &&
+        !RegExp(r'[\s\x00-\x1f\x7f]').hasMatch(url) &&
+        url.length <= WebsiteQrData.maxUrlLength;
+    return valid ? null : 'Adresse du site invalide (ex. https://exemple.com).';
+  }
+
+  static bool isValidWebsite(WebsiteQrData site) =>
+      validateWebsiteTitle(site.title) == null &&
+      validateWebsiteUrl(site.url) == null;
+
+  bool get isWebsiteValid => isValidWebsite(website);
+
+  static String? validateWifiSsid(String value) {
+    if (value.trim().isEmpty) return 'Veuillez saisir le nom du réseau.';
+    if (value.length > WifiQrData.maxSsidLength) {
+      return 'Le nom du réseau ne doit pas dépasser '
+          '${WifiQrData.maxSsidLength} caractères.';
+    }
+    return null;
+  }
+
+  static String? validateWifiPassword(String value, WifiSecurity security) {
+    if (!security.needsPassword) return null;
+    if (value.isEmpty) return 'Veuillez saisir le mot de passe.';
+    if (security != WifiSecurity.wep &&
+        value.length < WifiQrData.minWpaPasswordLength) {
+      return 'Le mot de passe doit contenir au moins '
+          '${WifiQrData.minWpaPasswordLength} caractères.';
+    }
+    return null;
+  }
+
+  static bool isValidWifi(WifiQrData wifi) =>
+      validateWifiSsid(wifi.ssid) == null &&
+      validateWifiPassword(wifi.password, wifi.security) == null;
+
+  bool get isWifiValid => isValidWifi(wifi);
+
   static bool isValidSocialPage(SocialPageData page) =>
       validateSocialTitle(page.title) == null &&
       validateSocialBio(page.bio) == null &&
@@ -172,7 +239,10 @@ class QrContentState {
     FileState? cv,
     FileState? cardImage,
     SocialPageData? socialPage,
-    PublishState? socialPagePublish,
+    WebsiteQrData? website,
+    WifiQrData? wifi,
+    SaveState? saving,
+    SavedQrCode? editing,
     Set<QrType>? showErrorsFor,
     int? failedGenerations,
     QrCodeData? result,
@@ -185,7 +255,10 @@ class QrContentState {
       cv: cv ?? this.cv,
       cardImage: cardImage ?? this.cardImage,
       socialPage: socialPage ?? this.socialPage,
-      socialPagePublish: socialPagePublish ?? this.socialPagePublish,
+      website: website ?? this.website,
+      wifi: wifi ?? this.wifi,
+      saving: saving ?? this.saving,
+      editing: editing ?? this.editing,
       showErrorsFor: showErrorsFor ?? this.showErrorsFor,
       failedGenerations: failedGenerations ?? this.failedGenerations,
       result: result ?? this.result,

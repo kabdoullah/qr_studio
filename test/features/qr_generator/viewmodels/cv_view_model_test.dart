@@ -17,6 +17,7 @@ void main() {
   late ProviderContainer container;
   late FakeFilePickerService picker;
   late FakeFileStorageService storage;
+  late FakeQrCodeService qrCodes;
 
   QrContentViewModel viewModel() =>
       container.read(qrContentViewModelProvider.notifier);
@@ -25,8 +26,10 @@ void main() {
   setUp(() {
     picker = FakeFilePickerService();
     storage = FakeFileStorageService();
+    qrCodes = FakeQrCodeService();
     container = ProviderContainer(
       overrides: [
+        ...signedIn(qrCodes: qrCodes),
         filePickerServiceProvider.overrideWithValue(picker),
         fileStorageServiceProvider.overrideWithValue(storage),
       ],
@@ -148,14 +151,14 @@ void main() {
       expect(storage.uploads, 0);
     });
 
-    test("met le CV en ligne et encode l'URL", () async {
+    test("met le CV en ligne et encode l'adresse publique", () async {
       picker.next = validCv;
       await viewModel().pickCv();
 
       final result = await viewModel().generateQr();
 
       expect(result?.type, QrType.cv);
-      expect(result?.payload, 'https://qrstudio.app/cv/a82f91d3');
+      expect(result?.payload, FakeQrCodeService.publicUrl(1));
       expect(cv().status, FileStatus.uploaded);
       expect(cv().file?.remoteUrl, 'https://qrstudio.app/cv/a82f91d3');
     });
@@ -209,5 +212,21 @@ void main() {
 
     expect(cv().file, isNull);
     expect(cv().status, FileStatus.noFile);
+  });
+
+  test('enregistre le CV sous son nom, limité à 100 caractères', () async {
+    picker.next = SharedFile(
+      name: '${'CV très détaillé ' * 10}.pdf',
+      size: 1000,
+      localPath: '/tmp/cv.pdf',
+    );
+    await viewModel().pickCv();
+
+    await viewModel().generateQr();
+
+    final created = qrCodes.created.single;
+    expect(created.title.length, 100);
+    expect(created.title, endsWith('…'));
+    expect(created.content, {'file_id': FakeFileStorageService.fileId});
   });
 }
