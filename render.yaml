@@ -10,7 +10,8 @@ services:
     region: frankfurt
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    # Le schéma des comptes et des QR Codes est migré avant chaque démarrage.
+    startCommand: alembic upgrade head && uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -23,6 +24,10 @@ services:
       # à appeler l'API depuis le navigateur. À saisir dans le tableau de bord.
       - key: QR_STUDIO_CORS_ORIGINS
         sync: false
+      # Signature des jetons de session, générée par Render à la création
+      # du service. La changer déconnecte tous les utilisateurs.
+      - key: JWT_SECRET_KEY
+        generateValue: true
 
   # PWA (Flutter web), pour les utilisateurs iOS : ouverte dans Safari puis
   # « Partager › Sur l'écran d'accueil ». Site statique servi par le CDN de

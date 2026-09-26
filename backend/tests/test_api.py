@@ -1,10 +1,11 @@
 """Tests de l'API de mise en ligne des fichiers."""
 
+from contextlib import ExitStack
+
 import pytest
-from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.main import create_app
+from tests.helpers import running_app
 
 PDF = b"%PDF-1.7\n" + b"0" * 2048
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 2048
@@ -20,7 +21,8 @@ def client(tmp_path):
         data_dir=tmp_path,
         max_file_bytes=100 * 1024,
     )
-    return TestClient(create_app(settings))
+    with running_app(settings) as client:
+        yield client
 
 
 def upload(client, endpoint, content, filename="fichier"):
@@ -138,19 +140,24 @@ def test_filename_is_sanitized(client):
 PWA = "https://pwa.qrstudio.test"
 
 
-def cors_client(tmp_path, **values):
-    settings = Settings(
-        public_url="https://qrstudio.test",
-        data_dir=tmp_path,
-        max_file_bytes=100 * 1024,
-        cors_origins=(PWA,),
-        **values,
-    )
-    return TestClient(create_app(settings))
+@pytest.fixture
+def cors_client(tmp_path):
+    def start(**values):
+        settings = Settings(
+            public_url="https://qrstudio.test",
+            data_dir=tmp_path,
+            max_file_bytes=100 * 1024,
+            cors_origins=(PWA,),
+            **values,
+        )
+        return stack.enter_context(running_app(settings))
+
+    with ExitStack() as stack:
+        yield start
 
 
-def test_cors_preflight_allows_the_pwa(tmp_path):
-    response = cors_client(tmp_path).options(
+def test_cors_preflight_allows_the_pwa(cors_client):
+    response = cors_client().options(
         "/api/v1/cvs",
         headers={"Origin": PWA, "Access-Control-Request-Method": "POST"},
     )
@@ -159,8 +166,8 @@ def test_cors_preflight_allows_the_pwa(tmp_path):
     assert response.headers["access-control-allow-origin"] == PWA
 
 
-def test_cors_upload_from_the_pwa(tmp_path):
-    client = cors_client(tmp_path)
+def test_cors_upload_from_the_pwa(cors_client):
+    client = cors_client()
     response = client.post(
         "/api/v1/cvs", files={"file": ("cv.pdf", PDF)}, headers={"Origin": PWA}
     )
@@ -169,8 +176,8 @@ def test_cors_upload_from_the_pwa(tmp_path):
     assert response.headers["access-control-allow-origin"] == PWA
 
 
-def test_cors_headers_on_rate_limited_upload(tmp_path):
-    client = cors_client(tmp_path, uploads_per_client_per_hour=0)
+def test_cors_headers_on_rate_limited_upload(cors_client):
+    client = cors_client(uploads_per_client_per_hour=0)
     response = client.post(
         "/api/v1/cvs", files={"file": ("cv.pdf", PDF)}, headers={"Origin": PWA}
     )
@@ -179,8 +186,8 @@ def test_cors_headers_on_rate_limited_upload(tmp_path):
     assert response.headers["access-control-allow-origin"] == PWA
 
 
-def test_cors_refuses_other_origins(tmp_path):
-    response = cors_client(tmp_path).options(
+def test_cors_refuses_other_origins(cors_client):
+    response = cors_client().options(
         "/api/v1/cvs",
         headers={
             "Origin": "https://evil.test",
@@ -195,3 +202,24 @@ def test_no_cors_by_default(client):
     response = client.get("/health", headers={"Origin": PWA})
 
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_allows_authorization_header(cors_client):
+    response = cors_client().options(
+        "/api/v1/qr-codes",
+        headers={
+            "Origin": PWA,
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
+
+
+def test_upload_requires_an_account(tmp_path):
+    settings = Settings(public_url="https://qrstudio.test", data_dir=tmp_path)
+    with running_app(settings, authenticated=False) as client:
+        assert upload(client, "/api/v1/cvs", PDF).status_code == 401
+        assert upload(client, "/api/v1/cards", PNG).status_code == 401

@@ -1,8 +1,8 @@
-"""API de QR Studio : mise en ligne des CV et des images de carte de visite,
-cartes de visite partagées et pages de réseaux sociaux.
+"""API de QR Studio : comptes, QR Codes des utilisateurs et leur page
+publique `/q/{slug}`, mise en ligne des CV et des images de carte de visite.
 
-Le QR Code généré par l'application contient l'URL renvoyée ici ; la
-personne qui le scanne ouvre directement le fichier dans son navigateur.
+Restent servis pour les QR Codes déjà imprimés : l'annuaire des cartes
+publiées et les pages de réseaux sociaux `/s/{id}`.
 """
 
 import os
@@ -10,17 +10,26 @@ import re
 import tempfile
 import unicodedata
 from pathlib import Path as FilePath
-from typing import Callable, Dict, Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Callable, Dict, Optional
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Path, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Path, Request, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .cards import CardStore, create_cards_router
 from .config import Settings
+from .core.database import Base, create_engine, create_sessionmaker
+from .core.dependencies import get_current_active_user
 from .database import create_database
+from .modules.auth.models import User
+from .modules.auth.router import router as auth_router
+from .modules.qr_codes.router import public_router as public_qr_router
+from .modules.qr_codes.router import router as qr_codes_router
 from .rate_limit import UploadRateLimiter
 from .social_pages import SocialPageStore, create_social_pages_router
 from .storage import CHUNK_SIZE, FileStore, StoredFile, create_store, new_file_id
@@ -28,6 +37,15 @@ from .storage import CHUNK_SIZE, FileStore, StoredFile, create_store, new_file_i
 # Marge pour l'enveloppe multipart (en-têtes, séparateurs).
 _MULTIPART_OVERHEAD = 64 * 1024
 _ID_PATTERN = r"^[A-Za-z0-9_-]{16}$"
+# Envois limités par heure : fichiers et publications anonymes.
+_UPLOAD_PATHS = (
+    "/api/v1/cvs",
+    "/api/v1/cards",
+    "/api/v1/business-cards",
+    "/api/v1/social-pages",
+)
+# Tentatives limitées par heure contre la force brute.
+_AUTH_PATHS = ("/api/v1/auth/login", "/api/v1/auth/register")
 
 
 def _sniff_pdf(head: bytes) -> Optional[str]:
@@ -79,17 +97,46 @@ def create_app(
     database = create_database(settings)
     card_store = card_store or CardStore(database)
     page_store = page_store or SocialPageStore(database)
-    limiter = UploadRateLimiter(
-        per_client=settings.uploads_per_client_per_hour,
-        total=settings.uploads_per_hour,
-    )
-    app = FastAPI(title="QR Studio API", version="1.0.0")
+    limiters = {
+        _UPLOAD_PATHS: UploadRateLimiter(
+            per_client=settings.uploads_per_client_per_hour,
+            total=settings.uploads_per_hour,
+        ),
+        _AUTH_PATHS: UploadRateLimiter(
+            per_client=settings.auth_attempts_per_client_per_hour,
+            total=settings.auth_attempts_per_hour,
+        ),
+    }
+    engine = create_engine(settings)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if settings.auto_create_schema:
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+        yield
+        await engine.dispose()
+
+    app = FastAPI(title="QR Studio API", version="2.0.0", lifespan=lifespan)
+    app.state.settings = settings
+    app.state.file_store = store
+    app.state.sessionmaker = create_sessionmaker(engine)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_: Request, error: RequestValidationError):
+        # Les valeurs refusées ne sont pas renvoyées : un mot de passe
+        # (compte, Wi-Fi) ne doit jamais apparaître dans une réponse.
+        details = [
+            {key: value for key, value in item.items() if key not in ("input", "ctx")}
+            for item in error.errors()
+        ]
+        return JSONResponse({"detail": jsonable_encoder(details)}, status_code=422)
 
     @app.middleware("http")
     async def limit_upload_size(request: Request, call_next):
         # Refuse les envois trop volumineux avant de lire le corps, pour ne
         # pas remplir le disque avec des fichiers qui seront rejetés.
-        if request.method == "POST":
+        if request.method in ("POST", "PUT"):
             length = request.headers.get("content-length")
             if length is None or not length.isdigit():
                 return JSONResponse(
@@ -100,11 +147,12 @@ def create_app(
             # Adresse fournie par le proxy de l'hébergeur. Elle peut être
             # falsifiée : la limite globale reste la vraie protection.
             client = request.client.host if request.client else "inconnu"
-            if not limiter.allow(client):
-                return JSONResponse(
-                    {"detail": "Trop d'envois. Réessayez plus tard."},
-                    status_code=429,
-                )
+            for paths, limiter in limiters.items():
+                if request.url.path in paths and not limiter.allow(client):
+                    return JSONResponse(
+                        {"detail": "Trop d'envois. Réessayez plus tard."},
+                        status_code=429,
+                    )
         return await call_next(request)
 
     # Ajouté après la limite de taille, donc exécuté avant : les refus
@@ -114,12 +162,14 @@ def create_app(
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(settings.cors_origins),
-            allow_methods=["GET", "POST"],
-            allow_headers=["Content-Type"],
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Content-Type", "Authorization"],
             max_age=3600,
         )
 
-    async def _store_upload(upload: UploadFile, kind: str) -> UploadResponse:
+    async def _store_upload(
+        upload: UploadFile, kind: str, owner: User
+    ) -> UploadResponse:
         file_id = new_file_id()
         # Fichier temporaire hors du stockage : un envoi refusé ne laisse
         # aucune trace.
@@ -151,6 +201,7 @@ def create_app(
                     filename=_safe_filename(upload.filename, f"{kind}-{file_id}"),
                     content_type=content_type,
                     size=size,
+                    owner_id=str(owner.id),
                 ),
                 temp_path,
             )
@@ -177,6 +228,9 @@ def create_app(
             },
         )
 
+    app.include_router(auth_router)
+    app.include_router(qr_codes_router)
+    app.include_router(public_qr_router)
     app.include_router(create_cards_router(card_store))
     app.include_router(create_social_pages_router(page_store, settings.public_url))
 
@@ -185,12 +239,16 @@ def create_app(
         return {"status": "ok"}
 
     @app.post("/api/v1/cvs", status_code=201, response_model=UploadResponse)
-    async def upload_cv(file: UploadFile) -> UploadResponse:
-        return await _store_upload(file, "cv")
+    async def upload_cv(
+        file: UploadFile, user: User = Depends(get_current_active_user)
+    ) -> UploadResponse:
+        return await _store_upload(file, "cv", user)
 
     @app.post("/api/v1/cards", status_code=201, response_model=UploadResponse)
-    async def upload_card(file: UploadFile) -> UploadResponse:
-        return await _store_upload(file, "card")
+    async def upload_card(
+        file: UploadFile, user: User = Depends(get_current_active_user)
+    ) -> UploadResponse:
+        return await _store_upload(file, "card", user)
 
     @app.get("/cv/{file_id}")
     def get_cv(file_id: str = Path(pattern=_ID_PATTERN)) -> StreamingResponse:

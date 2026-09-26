@@ -20,5 +20,6 @@ def database_url(postgres_server):
 
     url = postgres_server.get_uri()
     with psycopg.connect(url, autocommit=True) as db:
-        db.execute("DROP TABLE IF EXISTS files, business_cards, social_pages")
+        db.execute("DROP SCHEMA public CASCADE")
+        db.execute("CREATE SCHEMA public")
     return url

@@ -2,3 +2,12 @@ fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 python-multipart>=0.0.18
 psycopg[binary]>=3.2,<4
+# Comptes et QR Codes : SQLAlchemy async (asyncpg en production, SQLite en
+# développement) et migrations Alembic.
+sqlalchemy[asyncio]>=2.0.36,<2.1
+asyncpg>=0.30,<1
+aiosqlite>=0.20,<1
+alembic>=1.14,<2
+# Jetons de session et mots de passe (Argon2).
+PyJWT>=2.9,<3
+pwdlib[argon2]>=0.2.1,<0.4
