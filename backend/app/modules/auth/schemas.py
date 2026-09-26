@@ -1,7 +1,7 @@
 import re
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -43,17 +43,36 @@ class LoginIn(BaseModel):
     )
 
 
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+class RefreshIn(BaseModel):
+    refresh_token: str = Field(min_length=1, max_length=200)
+
+
+class GoogleIn(BaseModel):
+    id_token: str = Field(min_length=1, max_length=4096)
+
+
+class FacebookIn(BaseModel):
+    access_token: str = Field(min_length=1, max_length=4096)
 
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    email: str
+    email: Optional[str]
     first_name: str
     last_name: str
+    avatar_url: Optional[str]
+    email_verified: bool
     is_active: bool
     created_at: datetime
+
+
+class TokenPairOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class AuthOut(TokenPairOut):
+    user: UserOut

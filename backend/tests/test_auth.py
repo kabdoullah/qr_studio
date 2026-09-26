@@ -45,16 +45,20 @@ def login(client, email="awa@example.com", password=PASSWORD):
     return client.post("/api/v1/auth/login", json={"email": email, "password": password})
 
 
-def test_register_returns_the_account_without_password(client):
+def test_register_returns_the_account_and_a_session(client):
     response = signup(client)
 
     assert response.status_code == 201
     body = response.json()
-    assert body["email"] == "awa@example.com"
-    assert body["first_name"] == "Awa"
-    assert body["is_active"] is True
+    assert body["user"]["email"] == "awa@example.com"
+    assert body["user"]["first_name"] == "Awa"
+    assert body["user"]["is_active"] is True
+    assert body["user"]["email_verified"] is False
+    assert body["user"]["avatar_url"] is None
+    assert body["token_type"] == "bearer"
+    assert body["access_token"] and body["refresh_token"]
     assert "password" not in response.text
-    assert "password_hash" not in body
+    assert "hash" not in response.text
 
 
 def test_password_is_hashed(client, settings):
@@ -105,14 +109,27 @@ def test_validation_errors_never_echo_the_password(client):
     assert "secret7" not in response.text
 
 
-def test_login_returns_a_bearer_token(client):
+def test_login_returns_the_account_and_a_session(client):
     signup(client)
 
     response = login(client, email=" AWA@example.com")
 
     assert response.status_code == 200
-    assert response.json()["token_type"] == "bearer"
-    assert response.json()["access_token"]
+    body = response.json()
+    assert body["token_type"] == "bearer"
+    assert body["access_token"] and body["refresh_token"]
+    assert body["user"]["email"] == "awa@example.com"
+    assert "password" not in response.text
+    assert "hash" not in response.text
+
+
+def test_access_token_lasts_fifteen_minutes_by_default(client):
+    import jwt
+
+    signup(client)
+    claims = jwt.decode(_token(client), SECRET, algorithms=["HS256"])
+
+    assert claims["exp"] - claims["iat"] == 15 * 60
 
 
 @pytest.mark.parametrize(
@@ -136,8 +153,13 @@ def test_me_returns_the_connected_account(client):
     response = client.get("/api/v1/auth/me", headers=headers)
 
     assert response.status_code == 200
-    assert response.json()["email"] == "jean@example.com"
-    assert response.json()["first_name"] == "Jean"
+    body = response.json()
+    assert body["email"] == "jean@example.com"
+    assert body["first_name"] == "Jean"
+    assert set(body) == {
+        "id", "email", "first_name", "last_name", "avatar_url",
+        "email_verified", "is_active", "created_at",
+    }
 
 
 def test_me_requires_a_token(client):

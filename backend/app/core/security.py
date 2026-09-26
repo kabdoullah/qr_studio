@@ -1,7 +1,10 @@
-"""Mots de passe (Argon2 via pwdlib) et jetons de session (JWT)."""
+"""Mots de passe (Argon2 via pwdlib), jetons d'accès (JWT) et jetons de
+renouvellement (opaques)."""
 
+import hashlib
+import secrets
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 import jwt
 from pwdlib import PasswordHash
@@ -50,3 +53,17 @@ def decode_access_token(token: str, settings: Settings) -> Optional[str]:
         return None
     subject = payload.get("sub")
     return subject if isinstance(subject, str) else None
+
+
+def new_refresh_token() -> Tuple[str, str]:
+    """Nouveau jeton de renouvellement et son empreinte (seule conservée).
+
+    Le jeton est aléatoire (384 bits) : un SHA-256 suffit, sans sel ni
+    hachage lent, contrairement à un mot de passe.
+    """
+    token = secrets.token_urlsafe(48)
+    return token, hash_refresh_token(token)
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()

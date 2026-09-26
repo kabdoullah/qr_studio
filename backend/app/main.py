@@ -28,6 +28,7 @@ from .core.dependencies import get_current_active_user
 from .database import create_database
 from .modules.auth.models import User
 from .modules.auth.router import router as auth_router
+from .modules.auth.social import SocialAuthProvider, create_providers
 from .modules.qr_codes.router import public_router as public_qr_router
 from .modules.qr_codes.router import router as qr_codes_router
 from .rate_limit import UploadRateLimiter
@@ -45,7 +46,12 @@ _UPLOAD_PATHS = (
     "/api/v1/social-pages",
 )
 # Tentatives limitées par heure contre la force brute.
-_AUTH_PATHS = ("/api/v1/auth/login", "/api/v1/auth/register")
+_AUTH_PATHS = (
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/social/google",
+    "/api/v1/auth/social/facebook",
+)
 
 
 def _sniff_pdf(head: bytes) -> Optional[str]:
@@ -91,6 +97,7 @@ def create_app(
     store: Optional[FileStore] = None,
     card_store: Optional[CardStore] = None,
     page_store: Optional[SocialPageStore] = None,
+    social_providers: Optional[Dict[str, SocialAuthProvider]] = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or create_store(settings)
@@ -121,6 +128,7 @@ def create_app(
     app.state.settings = settings
     app.state.file_store = store
     app.state.sessionmaker = create_sessionmaker(engine)
+    app.state.social_providers = social_providers or create_providers(settings)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, error: RequestValidationError):

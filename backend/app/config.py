@@ -39,7 +39,18 @@ class Settings:
     # acceptée qu'en développement.
     jwt_secret_key: str = _DEV_JWT_SECRET
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    # Jeton d'accès court ; la session est prolongée par le jeton de
+    # renouvellement (opaque, conservé haché en base).
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 30
+    # Connexion Google : identifiants client OAuth acceptés comme audience
+    # (`aud`) des ID tokens (client web, utilisé aussi comme
+    # `serverClientId` sur Android). Vide : connexion Google indisponible.
+    google_client_ids: Tuple[str, ...] = ()
+    # Connexion Facebook : application Meta. Le secret ne quitte jamais le
+    # serveur. Vides : connexion Facebook indisponible.
+    facebook_app_id: Optional[str] = None
+    facebook_app_secret: Optional[str] = None
     # Tentatives de connexion et d'inscription par heure (force brute).
     auth_attempts_per_client_per_hour: int = 30
     auth_attempts_per_hour: int = 1000
@@ -89,17 +100,25 @@ class Settings:
             database_url=database_url,
             max_storage_bytes=int(env.get("QR_STUDIO_MAX_STORAGE_MB", "400")) * _MB,
             cors_origins=tuple(
-                origin.strip().rstrip("/")
-                for origin in env.get("QR_STUDIO_CORS_ORIGINS", "").split(",")
-                if origin.strip()
+                origin.rstrip("/")
+                for origin in _split(env.get("QR_STUDIO_CORS_ORIGINS", ""))
             ),
             app_env=app_env,
             jwt_secret_key=jwt_secret_key or _DEV_JWT_SECRET,
             jwt_algorithm=env.get("JWT_ALGORITHM", "HS256"),
             access_token_expire_minutes=int(
-                env.get("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+                env.get("ACCESS_TOKEN_EXPIRE_MINUTES", "15")
             ),
+            refresh_token_expire_days=int(env.get("REFRESH_TOKEN_EXPIRE_DAYS", "30")),
+            google_client_ids=_split(env.get("GOOGLE_CLIENT_ID", "")),
+            facebook_app_id=env.get("FACEBOOK_APP_ID") or None,
+            facebook_app_secret=env.get("FACEBOOK_APP_SECRET") or None,
         )
+
+
+def _split(value: str) -> Tuple[str, ...]:
+    """Liste séparée par des virgules, sans éléments vides."""
+    return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
 def psycopg_url(database_url: str) -> str:

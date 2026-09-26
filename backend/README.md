@@ -15,15 +15,50 @@ sont aussi enregistrés sur le compte.
 
 | Méthode | Chemin                         | Rôle                                              |
 |---------|--------------------------------|---------------------------------------------------|
-| POST    | `/api/v1/auth/register`        | Création de compte (`email`, `password` ≥ 8, `first_name`, `last_name`) → `201` |
-| POST    | `/api/v1/auth/login`           | `{"access_token", "token_type": "bearer"}`        |
-| GET     | `/api/v1/auth/me`              | Compte du jeton (`Authorization: Bearer …`)       |
+| POST    | `/api/v1/auth/register`        | Création de compte (`email`, `password` ≥ 8, `first_name`, `last_name`) → `201` + session |
+| POST    | `/api/v1/auth/login`           | Session : `{"user", "access_token", "refresh_token", "token_type": "bearer"}` |
+| POST    | `/api/v1/auth/social/google`   | `{"id_token"}` (ID token Google) → session        |
+| POST    | `/api/v1/auth/social/facebook` | `{"access_token"}` (jeton Facebook) → session     |
+| POST    | `/api/v1/auth/social/{google,facebook}/link` | Lie un compte externe au compte connecté → compte |
+| POST    | `/api/v1/auth/refresh`         | `{"refresh_token"}` → nouveaux `access_token` et `refresh_token` |
+| POST    | `/api/v1/auth/logout`          | `{"refresh_token"}` : termine cette session → `204` |
+| POST    | `/api/v1/auth/logout-all`      | Termine toutes les sessions du compte (jeton d'accès requis) → `204` |
+| GET     | `/api/v1/auth/me`              | `{id, email, first_name, last_name, avatar_url, email_verified, …}` |
 | GET     | `/api/v1/qr-codes`             | QR Codes du compte, plus récents d'abord          |
 | POST    | `/api/v1/qr-codes`             | Création : `{"type", "title", "content"}`         |
 | GET/PUT/DELETE | `/api/v1/qr-codes/{id}` | Lecture, modification (même slug), suppression   |
 | GET     | `/api/v1/public/q/{slug}`      | Contenu public, sans compte (JSON)                |
 | GET     | `/q/{slug}`                    | Page publique ouverte au scan (HTML, sans JavaScript) |
 
+- **Sessions** : jeton d'accès JWT court (`Authorization: Bearer …`, 15
+  min) et jeton de renouvellement opaque (30 jours), conservé en base
+  uniquement sous forme d'empreinte SHA-256 (`refresh_tokens`). Chaque
+  connexion ouvre une session (un appareil) ; chaque `refresh` révoque le
+  jeton présenté et en émet un nouveau. Présenter un jeton déjà remplacé
+  (vol probable) révoque toute la session : `401`. Un jeton inconnu, expiré
+  ou révoqué renvoie `401` ; un compte désactivé `403`. Après
+  `logout-all`, les jetons d'accès déjà émis restent valides jusqu'à leur
+  expiration (15 min au plus).
+- **Google / Facebook** : le serveur vérifie lui-même le credential
+  (Google : signature RS256 par les clés publiques de Google, émetteur,
+  audience `GOOGLE_CLIENT_ID`, expiration ; Facebook : `debug_token` avec
+  le secret de l'application, puis `/me` avec `appsecret_proof`) et n'utilise
+  que l'identité qui en ressort (`auth_identities`, unique par fournisseur et
+  identifiant). Un compte Facebook peut ne pas avoir d'email (`email: null`).
+  Fournisseur non configuré ou injoignable : `503` ; credential refusé : `401`.
+- **Liaison de comptes** : si l'email d'une connexion Google/Facebook
+  appartient déjà à un compte, les comptes ne sont fusionnés que si
+  l'adresse est vérifiée des deux côtés (Google `email_verified`, et compte
+  existant lui-même vérifié) ; sinon `409` « Un compte existe déjà avec
+  cette adresse… » : l'utilisateur se connecte puis appelle `…/link`. Les
+  emails Facebook ne sont jamais considérés comme vérifiés, et les comptes
+  créés par mot de passe ne le sont pas encore (pas de vérification
+  d'email) : en pratique, aucune fusion automatique avec eux.
+- **Force brute** : `login`, `register` et `social/*` sont limités à 30
+  tentatives par heure et par adresse IP (`429`). `refresh` ne l'est pas :
+  ses jetons aléatoires ne se devinent pas.
+- **Suppression de compte (à venir)** : identités et jetons sont supprimés
+  en cascade avec l'utilisateur, comme ses QR Codes.
 - **Propriété** : un QR Code n'est visible, modifiable et supprimable que
   par son compte ; celui d'un autre compte renvoie `404`.
 - **Types et `content`** : `text` (`text`, 1000 caractères), `website`
@@ -39,8 +74,8 @@ sont aussi enregistrés sur le compte.
   affiche ensuite « QR Code indisponible » (`404`).
 
 Schéma : SQLAlchemy 2 async (asyncpg en production, SQLite en
-développement), migré par Alembic (`migrations/`). Tables `users`,
-`qr_codes` et une table de contenu par type (`texts`, `websites`,
+développement), migré par Alembic (`migrations/`). Tables `users`, `auth_identities`,
+`refresh_tokens`, `qr_codes` et une table de contenu par type (`texts`, `websites`,
 `wifi_profiles`, `cv_documents`, `business_card_profiles`,
 `social_media_profiles`, `social_media_links`).
 
@@ -156,7 +191,10 @@ Android, réseau local sur iOS. En production, servez l'API en HTTPS.
 | `DATABASE_URL`             | —                                        | Chaîne PostgreSQL (Neon), `postgresql://` ou `postgresql+asyncpg://` ; sans elle, stockage local |
 | `JWT_SECRET_KEY`           | — (obligatoire hors développement)       | Signature des jetons de session       |
 | `JWT_ALGORITHM`            | `HS256`                                  | Algorithme des jetons                 |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30`                                  | Durée d'une session                   |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15`                                  | Durée d'un jeton d'accès              |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `30`                                    | Durée d'inactivité avant reconnexion  |
+| `GOOGLE_CLIENT_ID`         | — (connexion Google indisponible)        | Client(s) OAuth acceptés comme audience, séparés par des virgules |
+| `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` | — (connexion Facebook indisponible) | Application Meta ; le secret reste sur le serveur |
 | `PUBLIC_BASE_URL`          | `QR_STUDIO_PUBLIC_URL`                   | Base des adresses encodées (`/q/…`, fichiers) |
 | `QR_STUDIO_PUBLIC_URL`     | `RENDER_EXTERNAL_URL`, sinon `http://localhost:8000` | Base des liens encodés dans les QR |
 | `QR_STUDIO_MAX_STORAGE_MB` | `400`                                    | Espace total autorisé pour les fichiers |
@@ -203,6 +241,50 @@ racine.
 ```bash
 flutter build apk --dart-define=QR_STUDIO_API_URL=https://<service>.onrender.com
 ```
+
+### Connexion Google et Facebook
+
+Sans configuration, ces boutons ne sont pas affichés et les routes
+`/auth/social/*` répondent `503` : l'email et le mot de passe suffisent.
+Les identifiants publics sont passés à l'application par `--dart-define` ;
+les secrets restent sur le serveur.
+
+**Google** (Google Cloud Console › API et services › Identifiants) :
+1. Écran de consentement OAuth (nom, email de contact, domaine de la PWA).
+2. Client **Application Web** : origines JavaScript autorisées = adresse de
+   la PWA (ex. `https://qr-studio-web.onrender.com`) et
+   `http://localhost:8080` en développement. Son ID est :
+   - `GOOGLE_CLIENT_ID` du serveur (audience vérifiée) ;
+   - `--dart-define=GOOGLE_CLIENT_ID=…` de l'application (web : `clientId` ;
+     Android : `serverClientId`, l'ID token a alors ce client pour audience).
+3. Client **Android** : nom de package (`com.qrstudio.app`) et
+   empreinte SHA-1 de la clé qui signe l'APK (`./gradlew signingReport`).
+   Il n'est jamais passé à l'application : Google l'associe au package.
+
+**Facebook** (developers.facebook.com › Créer une application ›
+« Facebook Login ») :
+1. Paramètres de base : `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` (serveur
+   uniquement), jeton client (Paramètres › Avancé), URL de politique de
+   confidentialité et de suppression des données (exigées par Meta).
+2. Plateforme Android : package, classe `com.qrstudio.app.MainActivity`,
+   empreintes de clé (hash base64 de la clé de signature).
+3. Plateforme Web : domaine de la PWA (Facebook Login exige `https`).
+4. Application : `--dart-define=FACEBOOK_APP_ID=… --dart-define=FACEBOOK_CLIENT_TOKEN=…`
+   (Gradle les recopie dans les ressources Android du SDK Facebook).
+
+```bash
+flutter run --dart-define=QR_STUDIO_API_URL=… \
+  --dart-define=GOOGLE_CLIENT_ID=….apps.googleusercontent.com \
+  --dart-define=FACEBOOK_APP_ID=… --dart-define=FACEBOOK_CLIENT_TOKEN=…
+```
+
+**Migration des comptes existants** : la migration `0002` ne modifie aucune
+donnée. Les comptes existants gardent leur mot de passe (`email_verified`
+faux). Les sessions de l'ancienne version (jeton d'accès seul) ne sont pas
+reprises : chaque utilisateur se reconnecte une fois. Les QR Codes ont déjà
+un `user_id` ; les anciennes données sans propriétaire (`files` sans
+`owner_id`, `business_cards`, `social_pages`) restent publiques et ne sont
+attribuées à personne.
 
 ### Limites des offres gratuites
 
