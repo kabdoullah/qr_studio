@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
+import '../../../core/widgets/error_message.dart';
 
 import '../models/qr_type.dart';
 import '../viewmodels/qr_content_state.dart';
@@ -14,6 +15,8 @@ import '../widgets/shared_file_picker.dart';
 import '../widgets/qr_live_preview.dart';
 import '../widgets/social_page_form.dart';
 import '../widgets/text_form.dart';
+import '../widgets/website_form.dart';
+import '../widgets/wifi_form.dart';
 
 // Saisie du contenu du QR Code selon le type choisi sur l'accueil.
 class QrContentView extends ConsumerWidget {
@@ -33,7 +36,9 @@ class QrContentView extends ConsumerWidget {
       QrType.businessCard => const BusinessCardContent(),
       QrType.text => const TextForm(),
       QrType.cv => const SharedFilePicker(kind: SharedFileKind.cv),
-      QrType.socialPage => const SocialPageForm(),
+      QrType.socialMedia => const SocialPageForm(),
+      QrType.website => const WebsiteForm(),
+      QrType.wifi => const WifiForm(),
       null => const SizedBox.shrink(),
     };
     final hasPreview = ref.watch(
@@ -126,41 +131,33 @@ class _GenerateButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isBusy = ref.watch(
       qrContentViewModelProvider.select(
-        (s) =>
-            s.cv.isBusy ||
-            s.cardImage.isBusy ||
-            s.socialPagePublish.isPublishing,
+        (s) => s.cv.isBusy || s.cardImage.isBusy || s.saving.isSaving,
       ),
     );
     // L'envoi peut prendre plusieurs secondes (serveur en veille) : le
     // bouton explique pourquoi il est indisponible.
     final progressLabel = ref.watch(
       qrContentViewModelProvider.select(
-        (s) => s.socialPagePublish.isPublishing
-            ? 'Publication de la page…'
-            : s.cv.status == FileStatus.uploading ||
-                  s.cardImage.status == FileStatus.uploading
+        (s) =>
+            s.cv.status == FileStatus.uploading ||
+                s.cardImage.status == FileStatus.uploading
             ? 'Envoi du fichier…'
+            : s.saving.isSaving
+            ? 'Enregistrement…'
             : null,
+      ),
+    );
+    final type = ref.watch(qrGeneratorViewModelProvider);
+    final saveError = ref.watch(
+      qrContentViewModelProvider.select(
+        (s) => s.saving.type == type ? s.saving.errorMessage : null,
       ),
     );
 
     Future<void> generate() async {
-      final viewModel = ref.read(qrContentViewModelProvider.notifier);
-      final state = ref.read(qrContentViewModelProvider);
-      // Générer publie la page : l'utilisateur confirme d'abord. Une saisie
-      // invalide est refusée sans confirmation (les erreurs s'affichent).
-      final needsConfirmation =
-          ref.read(qrGeneratorViewModelProvider) == QrType.socialPage &&
-          state.isSocialPageValid;
-      if (needsConfirmation) {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => const SocialPagePublishDialog(),
-        );
-        if (confirmed != true) return;
-      }
-      final result = await viewModel.generateQr();
+      final result = await ref
+          .read(qrContentViewModelProvider.notifier)
+          .generateQr();
       if (result != null && context.mounted) {
         context.push(AppRoutes.result);
       }
@@ -168,15 +165,25 @@ class _GenerateButton extends ConsumerWidget {
 
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: FilledButton.icon(
-        onPressed: isBusy ? null : generate,
-        icon: progressLabel != null
-            ? const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.qr_code_2_rounded),
-        label: Text(progressLabel ?? 'Générer le QR Code'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (saveError != null) ...[
+            ErrorMessage(saveError),
+            const SizedBox(height: 8),
+          ],
+          FilledButton.icon(
+            onPressed: isBusy ? null : generate,
+            icon: progressLabel != null
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.qr_code_2_rounded),
+            label: Text(progressLabel ?? 'Générer le QR Code'),
+          ),
+        ],
       ),
     );
   }

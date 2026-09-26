@@ -230,7 +230,9 @@ class _SelectedCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        formatFileSize(file.size),
+                        file.size > 0
+                            ? formatFileSize(file.size)
+                            : 'Fichier déjà en ligne',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),

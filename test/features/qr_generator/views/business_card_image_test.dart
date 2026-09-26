@@ -26,6 +26,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...signedIn(),
           filePickerServiceProvider.overrideWithValue(picker),
           fileStorageServiceProvider.overrideWithValue(storage),
         ],
@@ -84,7 +85,7 @@ void main() {
     );
   });
 
-  testWidgets('avec un backend, le QR Code contient le lien vers l’image', (
+  testWidgets('avec un backend, le QR Code contient l’adresse publique', (
     tester,
   ) async {
     await openImageMode(
@@ -98,10 +99,10 @@ void main() {
 
     expect(find.text('Votre QR Code est prêt 🎉'), findsOneWidget);
     expect(find.text('carte.jpg'), findsOneWidget);
-    expect(find.text('https://qrstudio.app/card/b7c1'), findsOneWidget);
+    expect(find.text(FakeQrCodeService.publicUrl(1)), findsOneWidget);
     expect(
       tester.widget<QrPreview>(find.byType(QrPreview)).data,
-      'https://qrstudio.app/card/b7c1',
+      FakeQrCodeService.publicUrl(1),
     );
 
     // « Modifier » revient au mode image, avec l'image marquée en ligne.

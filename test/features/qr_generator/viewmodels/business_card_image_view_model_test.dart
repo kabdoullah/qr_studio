@@ -30,6 +30,7 @@ void main() {
     storage = FakeFileStorageService(url: 'https://qrstudio.app/card/b7c1');
     container = ProviderContainer(
       overrides: [
+        ...signedIn(),
         filePickerServiceProvider.overrideWithValue(picker),
         fileStorageServiceProvider.overrideWithValue(storage),
       ],
@@ -107,14 +108,15 @@ void main() {
       expect(storage.uploads, 0);
     });
 
-    test("met l'image en ligne et encode son lien", () async {
+    test("met l'image en ligne et encode l'adresse publique", () async {
       picker.next = cardImage;
       await viewModel().pickCardImage();
 
       final result = await viewModel().generateQr();
 
       expect(result?.type, QrType.businessCard);
-      expect(result?.payload, 'https://qrstudio.app/card/b7c1');
+      // Le QR Code mène à la page publique du QR Code, qui affiche l'image.
+      expect(result?.payload, FakeQrCodeService.publicUrl(1));
       expect(result?.file?.name, 'carte.jpg');
       expect(storage.kinds, [SharedFileKind.businessCardImage]);
       expect(state().cardImage.status, FileStatus.uploaded);

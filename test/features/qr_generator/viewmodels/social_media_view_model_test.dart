@@ -5,7 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/models/social_network.dart';
 import 'package:qr_studio/features/qr_generator/models/social_page_data.dart';
-import 'package:qr_studio/features/qr_generator/services/social_page_service.dart';
+import 'package:qr_studio/core/network/api_client.dart';
+import 'package:qr_studio/features/qr_generator/services/qr_code_service.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_state.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_view_model.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_generator_view_model.dart';
@@ -14,20 +15,20 @@ import '../../../helpers/fake_services.dart';
 
 void main() {
   late ProviderContainer container;
-  late FakeSocialPageService service;
+  late FakeQrCodeService service;
 
   QrContentViewModel viewModel() =>
       container.read(qrContentViewModelProvider.notifier);
   QrContentState state() => container.read(qrContentViewModelProvider);
   SocialPageData page() => state().socialPage;
 
-  ProviderContainer createContainer(SocialPageService? pageService) {
+  ProviderContainer createContainer(QrCodeService? qrCodes) {
     final c = ProviderContainer(
-      overrides: [socialPageServiceProvider.overrideWithValue(pageService)],
+      overrides: [qrCodeServiceProvider.overrideWithValue(qrCodes)],
     );
     c
         .read(qrGeneratorViewModelProvider.notifier)
-        .selectQrType(QrType.socialPage);
+        .selectQrType(QrType.socialMedia);
     return c;
   }
 
@@ -39,7 +40,7 @@ void main() {
   }
 
   setUp(() {
-    service = FakeSocialPageService();
+    service = FakeQrCodeService();
     container = createContainer(service);
   });
   tearDown(() => container.dispose());
@@ -60,10 +61,10 @@ void main() {
 
     test('attribue des identifiants distincts', () {
       viewModel()
-        ..addSocialLink(SocialNetwork.x)
-        ..addSocialLink(SocialNetwork.x);
+        ..addSocialLink(SocialNetwork.twitter)
+        ..addSocialLink(SocialNetwork.twitter);
       viewModel().removeSocialLink(page().links.first.id);
-      viewModel().addSocialLink(SocialNetwork.x);
+      viewModel().addSocialLink(SocialNetwork.twitter);
 
       final ids = page().links.map((l) => l.id).toSet();
       expect(ids, hasLength(2));
@@ -116,16 +117,38 @@ void main() {
   });
 
   group('generateQr', () {
-    test('publie la page et encode son URL', () async {
+    test("enregistre le profil et encode l'adresse publique", () async {
       fillValidPage();
 
       final result = await viewModel().generateQr();
 
-      expect(result?.payload, service.url);
-      expect(result?.type, QrType.socialPage);
+      // Le QR Code contient l'adresse QR Studio, jamais les liens.
+      expect(result?.payload, FakeQrCodeService.publicUrl(1));
+      expect(result?.type, QrType.socialMedia);
       expect(result?.isOnlineLink, isTrue);
-      expect(service.published.single.title, 'Awa');
-      expect(state().socialPagePublish.errorMessage, isNull);
+      final created = service.created.single;
+      expect(created.type, QrType.socialMedia);
+      expect(created.title, 'Awa');
+      expect(created.content, {
+        'description': '',
+        'links': [
+          {'platform': 'instagram', 'url': 'https://www.instagram.com/awa'},
+        ],
+      });
+      expect(state().saving.errorMessage, isNull);
+    });
+
+    test('modifier met à jour le même QR Code', () async {
+      fillValidPage();
+      await viewModel().generateQr();
+
+      viewModel().addSocialLink(SocialNetwork.github);
+      viewModel().updateSocialLink(page().links.last.id, 'awa');
+      final result = await viewModel().generateQr();
+
+      expect(service.created, hasLength(1));
+      expect(service.updated, ['qr1']);
+      expect(result?.payload, FakeQrCodeService.publicUrl(1));
     });
 
     test('ne publie pas une page invalide et affiche ses erreurs', () async {
@@ -134,58 +157,63 @@ void main() {
       final result = await viewModel().generateQr();
 
       expect(result, isNull);
-      expect(service.published, isEmpty);
-      expect(state().showErrorsFor, contains(QrType.socialPage));
+      expect(service.created, isEmpty);
+      expect(state().showErrorsFor, contains(QrType.socialMedia));
     });
 
-    test('indique la publication en cours et ignore un second appel', () async {
-      fillValidPage();
-      service.gate = Completer<void>();
+    test(
+      "indique l'enregistrement en cours et ignore un second appel",
+      () async {
+        fillValidPage();
+        service.gate = Completer<void>();
 
-      final pending = viewModel().generateQr();
-      expect(state().socialPagePublish.isPublishing, isTrue);
-      expect(await viewModel().generateQr(), isNull);
+        final pending = viewModel().generateQr();
+        await Future<void>.delayed(Duration.zero);
+        expect(state().saving.isSaving, isTrue);
+        expect(await viewModel().generateQr(), isNull);
 
-      service.gate!.complete();
-      expect(await pending, isNotNull);
-      expect(state().socialPagePublish.isPublishing, isFalse);
-      expect(service.published, hasLength(1));
-    });
+        service.gate!.complete();
+        expect(await pending, isNotNull);
+        expect(state().saving.isSaving, isFalse);
+        expect(service.created, hasLength(1));
+      },
+    );
 
-    test('message clair en cas d’échec réseau', () async {
+    test('message clair en cas d’échec inattendu', () async {
       fillValidPage();
       service.error = Exception('timeout');
 
       expect(await viewModel().generateQr(), isNull);
-      expect(
-        state().socialPagePublish.errorMessage,
-        QrContentViewModel.publishFailedMessage,
-      );
+      expect(state().saving.errorMessage, QrContentViewModel.saveFailedMessage);
     });
 
-    test('message dédié quand le serveur limite les envois', () async {
+    test('affiche le message du serveur (hors ligne, limite…)', () async {
       fillValidPage();
-      service.error = const SocialPageException('429', statusCode: 429);
+      service.error = const ApiException(ApiErrorKind.offline);
 
       await viewModel().generateQr();
 
       expect(
-        state().socialPagePublish.errorMessage,
-        QrContentViewModel.publishTooManyMessage,
+        state().saving.errorMessage,
+        const ApiException(ApiErrorKind.offline).message,
       );
+      expect(state().saving.type, QrType.socialMedia);
     });
 
-    test('sans serveur, indique que la publication est indisponible', () async {
-      container.dispose();
-      container = createContainer(null);
-      fillValidPage();
+    test(
+      "sans serveur, indique que l'enregistrement est indisponible",
+      () async {
+        container.dispose();
+        container = createContainer(null);
+        fillValidPage();
 
-      expect(await viewModel().generateQr(), isNull);
-      expect(
-        state().socialPagePublish.errorMessage,
-        QrContentViewModel.publishUnavailableMessage,
-      );
-    });
+        expect(await viewModel().generateQr(), isNull);
+        expect(
+          state().saving.errorMessage,
+          QrContentViewModel.saveUnavailableMessage,
+        );
+      },
+    );
   });
 
   test('startOver efface la page', () {
@@ -197,9 +225,18 @@ void main() {
     expect(page().links, isEmpty);
   });
 
-  test('pas d’aperçu en direct avant publication', () {
+  test('pas d’aperçu en direct avant enregistrement', () {
     fillValidPage();
 
     expect(container.read(livePreviewProvider), isNull);
+  });
+
+  test('un titre de 100 caractères est enregistré tel quel', () async {
+    fillValidPage();
+    viewModel().updateSocialPage((p) => p.copyWith(title: 'T' * 100));
+
+    await viewModel().generateQr();
+
+    expect(service.created.single.title, 'T' * 100);
   });
 }

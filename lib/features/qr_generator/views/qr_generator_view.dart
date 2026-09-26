@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
+import '../../auth/viewmodels/auth_view_model.dart';
 import '../models/qr_type.dart';
 import '../viewmodels/qr_generator_view_model.dart';
 import '../widgets/qr_type_card.dart';
@@ -17,6 +18,9 @@ class QrGeneratorView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final firstName = ref.watch(
+      authViewModelProvider.select((s) => s.user?.firstName.trim()),
+    );
 
     void onTypeSelected(QrType type) {
       ref.read(qrGeneratorViewModelProvider.notifier).selectQrType(type);
@@ -33,13 +37,29 @@ class QrGeneratorView extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'QR Studio',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: colors.primary,
-                    ),
+                  // Le menu passe sous le titre si la place manque (texte
+                  // agrandi, petit écran).
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'QR Studio',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: colors.primary,
+                        ),
+                      ),
+                      const _AccountMenu(),
+                    ],
                   ),
                   const SizedBox(height: 12),
+                  if (firstName != null && firstName.isNotEmpty) ...[
+                    Text(
+                      'Bonjour, $firstName',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   Text(
                     'Créez votre QR Code\nsimplement et rapidement.',
                     style: theme.textTheme.headlineMedium,
@@ -65,3 +85,49 @@ class QrGeneratorView extends ConsumerWidget {
     );
   }
 }
+
+// Menu du compte : « Mes QR Codes » et déconnexion.
+class _AccountMenu extends ConsumerWidget {
+  const _AccountMenu();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<_AccountAction>(
+      tooltip: 'Mon compte',
+      onSelected: (action) => switch (action) {
+        _AccountAction.history => context.push(AppRoutes.history),
+        _AccountAction.logout =>
+          ref.read(authViewModelProvider.notifier).logout(),
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: _AccountAction.history,
+          child: ListTile(
+            leading: Icon(Icons.history_rounded),
+            title: Text('Mes QR Codes'),
+          ),
+        ),
+        PopupMenuItem(
+          value: _AccountAction.logout,
+          child: ListTile(
+            leading: Icon(Icons.logout_rounded),
+            title: Text('Se déconnecter'),
+          ),
+        ),
+      ],
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.account_circle_outlined),
+            SizedBox(width: 6),
+            Flexible(child: Text('Mon compte')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _AccountAction { history, logout }

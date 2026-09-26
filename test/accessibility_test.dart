@@ -7,7 +7,6 @@ import 'package:qr_studio/features/qr_generator/models/shared_file.dart';
 import 'package:qr_studio/features/qr_generator/services/business_card_directory_service.dart';
 import 'package:qr_studio/features/qr_generator/services/file_storage_service.dart';
 import 'package:qr_studio/features/qr_generator/services/file_picker_service.dart';
-import 'package:qr_studio/features/qr_generator/services/social_page_service.dart';
 
 import 'helpers/fake_services.dart';
 
@@ -22,11 +21,16 @@ void main() {
 
   late FakeFilePickerService picker;
 
-  Future<void> pumpApp(WidgetTester tester, {ThemeMode? mode}) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    ThemeMode? mode,
+    bool connected = true,
+  }) async {
     picker = FakeFilePickerService()..next = validCv;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...signedIn(storage: FakeTokenStorage(connected ? 'jeton' : null)),
           filePickerServiceProvider.overrideWithValue(picker),
           fileStorageServiceProvider.overrideWithValue(
             FakeFileStorageService(),
@@ -34,7 +38,6 @@ void main() {
           businessCardDirectoryProvider.overrideWithValue(
             FakeBusinessCardDirectory([jeanCard, awaCard]),
           ),
-          socialPageServiceProvider.overrideWithValue(FakeSocialPageService()),
         ],
         child: const QrStudioApp(),
       ),
@@ -132,12 +135,67 @@ void main() {
         handle.dispose();
       });
 
+      testWidgets('connexion et inscription avec erreurs', (tester) async {
+        final handle = tester.ensureSemantics();
+        await pumpApp(tester, connected: false);
+        await tester.tap(find.text('Se connecter'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+
+        await tester.ensureVisible(find.text('Créer un compte'));
+        await tester.tap(find.text('Créer un compte'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Créer mon compte'));
+        await tester.tap(find.text('Créer mon compte'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+        handle.dispose();
+      });
+
+      testWidgets('site web et Wi-Fi', (tester) async {
+        final handle = tester.ensureSemantics();
+        await pumpApp(tester);
+        await open(tester, QrType.website);
+        await tester.tap(find.text('Générer le QR Code'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await open(tester, QrType.wifi);
+        await tester.enterText(find.byType(TextFormField).first, 'Maison');
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+        handle.dispose();
+      });
+
+      testWidgets('menu du compte et Mes QR Codes', (tester) async {
+        final handle = tester.ensureSemantics();
+        await pumpApp(tester);
+        await open(tester, QrType.text);
+        await tester.enterText(find.byType(TextFormField), 'Bonjour');
+        await tester.tap(find.text('Générer le QR Code'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Créer un nouveau QR Code'));
+        await tester.tap(find.text('Créer un nouveau QR Code'));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Mon compte'));
+        await tester.tap(find.text('Mon compte'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+        await tester.tap(find.text('Mes QR Codes'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+        handle.dispose();
+      });
+
       testWidgets('page de réseaux avec erreurs puis confirmation', (
         tester,
       ) async {
         final handle = tester.ensureSemantics();
         await pumpApp(tester);
-        await open(tester, QrType.socialPage);
+        await open(tester, QrType.socialMedia);
         await tester.tap(find.text('Générer le QR Code'));
         await tester.pumpAndSettle();
         await expectAccessible(tester);
@@ -172,7 +230,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
     await pumpApp(tester);
-    await open(tester, QrType.socialPage);
+    await open(tester, QrType.socialMedia);
     await tester.ensureVisible(find.text('Ajouter un réseau'));
     await tester.tap(find.text('Ajouter un réseau'));
     await tester.pumpAndSettle();

@@ -49,7 +49,7 @@ class BusinessCardDirectoryService {
         .post(
           _endpoint,
           headers: const {'Content-Type': 'application/json'},
-          body: jsonEncode(_toJson(card)),
+          body: jsonEncode(card.toJson()),
         )
         .timeout(timeout);
     return _parseCard(_decode(response, 201));
@@ -73,43 +73,11 @@ class BusinessCardDirectoryService {
     if (json is! Map<String, dynamic> || json['id'] is! String) {
       throw const BusinessCardDirectoryException('Carte invalide.');
     }
-    String field(String name) =>
-        json[name] is String ? json[name] as String : '';
     return SavedBusinessCard(
       id: json['id'] as String,
-      data: BusinessCardData(
-        firstName: field('first_name'),
-        lastName: field('last_name'),
-        jobTitle: field('job_title'),
-        company: field('company'),
-        phone: field('phone'),
-        email: field('email'),
-        website: field('website'),
-        address: field('address'),
-        city: field('city'),
-        country: field('country'),
-        linkedin: field('linkedin'),
-        instagram: field('instagram'),
-        whatsapp: field('whatsapp'),
-      ),
+      data: BusinessCardData.fromJson(json),
     );
   }
-
-  static Map<String, String> _toJson(BusinessCardData c) => {
-    'first_name': c.firstName.trim(),
-    'last_name': c.lastName.trim(),
-    'job_title': c.jobTitle.trim(),
-    'company': c.company.trim(),
-    'phone': c.phone.trim(),
-    'email': c.email.trim(),
-    'website': c.website.trim(),
-    'address': c.address.trim(),
-    'city': c.city.trim(),
-    'country': c.country.trim(),
-    'linkedin': c.linkedin.trim(),
-    'instagram': c.instagram.trim(),
-    'whatsapp': c.whatsapp.trim(),
-  };
 }
 
 // `null` quand l'application est lancée sans adresse de serveur : les

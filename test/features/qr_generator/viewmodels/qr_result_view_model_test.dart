@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_code_data.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
+import 'package:qr_studio/features/qr_generator/models/shared_file.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_export_service.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_share_service.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_result_view_model.dart';
@@ -21,7 +22,9 @@ void main() {
   final cv = QrCodeData(
     type: QrType.cv,
     payload: 'https://qrstudio.app/cv/a82f91d3',
-    file: validCv.withRemoteUrl('https://qrstudio.app/cv/a82f91d3'),
+    file: validCv.withRemote(
+      const RemoteFile(id: 'a82f91d3', url: 'https://qrstudio.app/cv/a82f91d3'),
+    ),
   );
 
   QrResultViewModel viewModel() =>
@@ -32,6 +35,7 @@ void main() {
     sharer = FakeQrShareService();
     container = ProviderContainer(
       overrides: [
+        ...signedIn(),
         qrExportServiceProvider.overrideWithValue(exporter),
         qrShareServiceProvider.overrideWithValue(sharer),
       ],
@@ -100,6 +104,7 @@ void main() {
     container.dispose();
     container = ProviderContainer(
       overrides: [
+        ...signedIn(),
         qrExportServiceProvider.overrideWithValue(slowExporter),
         qrShareServiceProvider.overrideWithValue(sharer),
       ],

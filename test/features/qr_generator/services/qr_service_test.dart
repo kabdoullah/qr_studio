@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/features/qr_generator/models/business_card_data.dart';
+import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
+import 'package:qr_studio/features/qr_generator/models/saved_qr_code.dart';
 import 'package:qr_studio/features/qr_generator/models/text_qr_data.dart';
+import 'package:qr_studio/features/qr_generator/models/wifi_qr_data.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_service.dart';
 
 void main() {
@@ -149,6 +152,142 @@ void main() {
         service.generateLinkPayload(' https://qrstudio.app/cv/a82f91d3 '),
         'https://qrstudio.app/cv/a82f91d3',
       );
+    });
+  });
+
+  group('generateWifiPayload', () {
+    test('réseau WPA2 au format standard', () {
+      expect(
+        service.generateWifiPayload(
+          const WifiQrData(ssid: 'Office-Wifi', password: 'secret123'),
+        ),
+        'WIFI:T:WPA;S:Office-Wifi;P:secret123;;',
+      );
+    });
+
+    test('WPA et WPA3 utilisent la valeur compatible WPA', () {
+      for (final security in [WifiSecurity.wpa, WifiSecurity.wpa3]) {
+        expect(
+          service.generateWifiPayload(
+            WifiQrData(
+              ssid: 'MyWifi',
+              password: 'MyPassword',
+              security: security,
+            ),
+          ),
+          'WIFI:T:WPA;S:MyWifi;P:MyPassword;;',
+        );
+      }
+    });
+
+    test('WEP', () {
+      expect(
+        service.generateWifiPayload(
+          const WifiQrData(
+            ssid: 'Ancien',
+            password: 'abcde',
+            security: WifiSecurity.wep,
+          ),
+        ),
+        'WIFI:T:WEP;S:Ancien;P:abcde;;',
+      );
+    });
+
+    test('réseau ouvert : aucun mot de passe', () {
+      expect(
+        service.generateWifiPayload(
+          const WifiQrData(
+            ssid: 'FreeWifi',
+            password: 'oublié',
+            security: WifiSecurity.none,
+          ),
+        ),
+        'WIFI:T:nopass;S:FreeWifi;;',
+      );
+    });
+
+    test('réseau masqué', () {
+      expect(
+        service.generateWifiPayload(
+          const WifiQrData(ssid: 'Cache', password: '12345678', hidden: true),
+        ),
+        'WIFI:T:WPA;S:Cache;P:12345678;H:true;;',
+      );
+    });
+
+    test('échappe \\ ; , : " dans le nom et le mot de passe', () {
+      expect(
+        service.generateWifiPayload(
+          const WifiQrData(ssid: r'Café;"Wi,Fi":\', password: r'p;a,s:s"\w'),
+        ),
+        r'WIFI:T:WPA;S:Café\;\"Wi\,Fi\"\:\\;P:p\;a\,s\:s\"\\w;;',
+      );
+    });
+
+    test('toString ne révèle jamais le mot de passe', () {
+      const wifi = WifiQrData(ssid: 'Maison', password: 'secret-wifi');
+
+      expect(wifi.toString(), isNot(contains('secret-wifi')));
+    });
+  });
+
+  group('réseaux sociaux et site web', () {
+    const publicUrl = 'https://qrstudio.app/q/x8K2pLm91abc';
+
+    test("encodent l'adresse publique QR Studio", () {
+      expect(service.generateSocialMediaPayload(publicUrl), publicUrl);
+      expect(service.generateWebsitePayload(' $publicUrl '), publicUrl);
+    });
+  });
+
+  group('generateSavedPayload', () {
+    SavedQrCode saved(QrType type, Map<String, Object?> content) => SavedQrCode(
+      id: 'id',
+      type: type,
+      title: 'Titre',
+      publicUrl: 'https://qr.test/q/slug',
+      content: content,
+    );
+
+    test('types statiques : même contenu qu’à la création', () {
+      expect(
+        service.generateSavedPayload(saved(QrType.text, {'text': 'Bonjour'})),
+        'Bonjour',
+      );
+      expect(
+        service.generateSavedPayload(
+          saved(QrType.wifi, {
+            'ssid': 'Maison',
+            'security': 'WPA2',
+            'password': '12345678',
+            'hidden': false,
+          }),
+        ),
+        'WIFI:T:WPA;S:Maison;P:12345678;;',
+      );
+      expect(
+        service.generateSavedPayload(
+          saved(QrType.businessCard, {
+            'mode': 'details',
+            'details': {'first_name': 'Awa', 'last_name': 'Traoré'},
+          }),
+        ),
+        startsWith('BEGIN:VCARD'),
+      );
+    });
+
+    test('types dynamiques et fichiers : adresse publique', () {
+      for (final (type, content) in [
+        (QrType.website, <String, Object?>{'url': 'https://example.com'}),
+        (QrType.socialMedia, <String, Object?>{'links': []}),
+        (QrType.cv, <String, Object?>{'file_id': 'f'}),
+        (QrType.businessCard, <String, Object?>{'mode': 'image'}),
+      ]) {
+        expect(
+          service.generateSavedPayload(saved(type, content)),
+          'https://qr.test/q/slug',
+        );
+      }
     });
   });
 }

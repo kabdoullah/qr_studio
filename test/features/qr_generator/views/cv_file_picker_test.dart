@@ -22,6 +22,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...signedIn(),
           filePickerServiceProvider.overrideWithValue(picker),
           fileStorageServiceProvider.overrideWithValue(storage),
         ],
@@ -100,7 +101,7 @@ void main() {
 
     expect(find.text('Votre CV est prêt 🎉'), findsOneWidget);
     expect(find.text('CV_Abdoullah_Coulibaly.pdf'), findsOneWidget);
-    expect(find.text('https://qrstudio.app/cv/a82f91d3'), findsOneWidget);
+    expect(find.text(FakeQrCodeService.publicUrl(1)), findsOneWidget);
 
     // Au retour, le CV est indiqué comme déjà en ligne.
     await tester.ensureVisible(find.text('Modifier'));

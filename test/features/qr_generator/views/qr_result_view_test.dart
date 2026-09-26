@@ -24,6 +24,7 @@ void main() {
     sharer = FakeQrShareService();
     container = ProviderContainer(
       overrides: [
+        ...signedIn(),
         qrExportServiceProvider.overrideWithValue(FakeQrExportService()),
         qrShareServiceProvider.overrideWithValue(sharer),
       ],

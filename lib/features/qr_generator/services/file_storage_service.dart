@@ -1,16 +1,13 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../core/constants/api_config.dart';
+import '../../../core/network/api_client.dart';
 import '../models/shared_file.dart';
 
-// Met un fichier en ligne et renvoie l'URL publique encodée dans le QR Code.
-// Le serveur est dans `backend/` (FastAPI).
+// Met un fichier en ligne sur le compte connecté. Le serveur est dans
+// `backend/` (FastAPI).
 abstract interface class FileStorageService {
-  Future<String> upload(SharedFile file, SharedFileKind kind);
+  Future<RemoteFile> upload(SharedFile file, SharedFileKind kind);
 }
 
 // Levée tant qu'aucun backend de stockage n'est disponible.
@@ -29,39 +26,26 @@ final class BackendRequiredFileStorageService implements FileStorageService {
   const BackendRequiredFileStorageService();
 
   @override
-  Future<String> upload(SharedFile file, SharedFileKind kind) async {
+  Future<RemoteFile> upload(SharedFile file, SharedFileKind kind) async {
     throw const FileStorageUnavailableException();
   }
 }
 
-// Réponse inattendue du serveur (statut d'erreur ou réponse invalide).
-class FileUploadException implements Exception {
-  const FileUploadException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'FileUploadException: $message';
-}
-
-// Envoi vers le backend QR Studio :
+// Envoi vers le backend QR Studio (compte connecté) :
 // - CV : `POST /api/v1/cvs` ;
 // - image de carte de visite : `POST /api/v1/cards` ;
 // réponse `201 { "id": "...", "url": "..." }`.
 final class HttpFileStorageService implements FileStorageService {
-  HttpFileStorageService(String baseUrl, {http.Client? client})
-    : _baseUrl = apiBaseUri(baseUrl),
-      _client = client ?? http.Client();
+  const HttpFileStorageService(this._api);
 
   // Un fichier de 10 MB sur une connexion mobile lente.
   static const Duration timeout = Duration(minutes: 2);
 
-  final Uri _baseUrl;
-  final http.Client _client;
+  final ApiClient _api;
 
   @override
-  Future<String> upload(SharedFile file, SharedFileKind kind) async {
-    final endpoint = _baseUrl.resolve(switch (kind) {
+  Future<RemoteFile> upload(SharedFile file, SharedFileKind kind) async {
+    final endpoint = _api.resolve(switch (kind) {
       SharedFileKind.cv => 'api/v1/cvs',
       SharedFileKind.businessCardImage => 'api/v1/cards',
     });
@@ -81,29 +65,22 @@ final class HttpFileStorageService implements FileStorageService {
         filename: file.name,
       );
     } else {
-      throw FileUploadException('Fichier local introuvable : ${file.name}');
+      throw const ApiException(ApiErrorKind.validation);
     }
     final request = http.MultipartRequest('POST', endpoint)..files.add(part);
-    final response = await http.Response.fromStream(
-      await _client.send(request).timeout(timeout),
-    ).timeout(timeout);
-
-    if (response.statusCode != 201) {
-      throw FileUploadException(
-        'Statut ${response.statusCode} : ${response.body}',
-      );
+    final body = await _api.send(request, timeout: timeout);
+    if (body case {'id': final String id, 'url': final String url}) {
+      final uri = Uri.tryParse(url);
+      if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
+        return RemoteFile(id: id, url: url);
+      }
     }
-    final body = jsonDecode(response.body);
-    final url = body is Map<String, dynamic> ? body['url'] : null;
-    final uri = url is String ? Uri.tryParse(url) : null;
-    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
-      throw FileUploadException('Réponse invalide : ${response.body}');
-    }
-    return uri.toString();
+    throw const ApiException(ApiErrorKind.invalidResponse);
   }
 }
 
 final fileStorageServiceProvider = Provider<FileStorageService>((ref) {
-  if (apiBaseUrl.isEmpty) return const BackendRequiredFileStorageService();
-  return HttpFileStorageService(apiBaseUrl);
+  final api = ref.watch(apiClientProvider);
+  if (api == null) return const BackendRequiredFileStorageService();
+  return HttpFileStorageService(api);
 });

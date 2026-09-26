@@ -62,6 +62,7 @@ class SharedFile {
     required this.size,
     this.localPath,
     this.bytes,
+    this.remoteId,
     this.remoteUrl,
   });
 
@@ -76,14 +77,27 @@ class SharedFile {
   // de chemin sur le disque.
   final Uint8List? bytes;
 
-  // URL publique renvoyée par le backend après l'envoi.
+  // Identifiant et URL du fichier renvoyés par le backend après l'envoi.
+  // Le QR Code enregistré désigne le fichier par son identifiant.
+  final String? remoteId;
   final String? remoteUrl;
 
-  SharedFile withRemoteUrl(String url) => SharedFile(
+  bool get isUploaded => remoteId != null;
+
+  SharedFile withRemote(RemoteFile remote) => SharedFile(
     name: name,
     size: size,
     localPath: localPath,
     bytes: bytes,
-    remoteUrl: url,
+    remoteId: remote.id,
+    remoteUrl: remote.url,
   );
+}
+
+// Fichier mis en ligne : `201 { "id", "url" }`.
+class RemoteFile {
+  const RemoteFile({required this.id, required this.url});
+
+  final String id;
+  final String url;
 }

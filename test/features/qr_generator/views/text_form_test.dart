@@ -6,11 +6,13 @@ import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_view_model.dart';
 import 'package:qr_studio/features/qr_generator/widgets/qr_preview.dart';
 
+import '../../../helpers/fake_services.dart';
+
 void main() {
   late ProviderContainer container;
 
   Future<void> openText(WidgetTester tester) async {
-    container = ProviderContainer();
+    container = ProviderContainer(overrides: signedIn());
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(

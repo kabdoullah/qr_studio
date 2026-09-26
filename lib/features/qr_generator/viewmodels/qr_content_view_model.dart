@@ -2,17 +2,22 @@ import 'dart:developer' as developer;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_client.dart';
+
 import '../models/business_card_data.dart';
 import '../models/qr_code_data.dart';
 import '../models/qr_type.dart';
+import '../models/saved_qr_code.dart';
 import '../models/text_qr_data.dart';
+import '../models/website_qr_data.dart';
+import '../models/wifi_qr_data.dart';
 import '../models/shared_file.dart';
 import '../models/social_network.dart';
 import '../models/social_page_data.dart';
 import '../services/file_picker_service.dart';
 import '../services/file_storage_service.dart';
 import '../services/qr_service.dart';
-import '../services/social_page_service.dart';
+import '../services/qr_code_service.dart';
 import 'qr_content_state.dart';
 import 'qr_generator_view_model.dart';
 
@@ -20,14 +25,12 @@ import 'qr_generator_view_model.dart';
 class QrContentViewModel extends Notifier<QrContentState> {
   static const String pickFailedMessage =
       'Impossible de sélectionner le fichier.\nVeuillez réessayer.';
-  static const String publishUnavailableMessage =
-      "La publication des pages n'est pas encore disponible.\n"
+  static const String saveUnavailableMessage =
+      "L'enregistrement des QR Codes n'est pas encore disponible.\n"
       'Votre QR Code pourra être créé dès son ouverture.';
-  static const String publishFailedMessage =
-      'Impossible de publier la page.\n'
+  static const String saveFailedMessage =
+      "Impossible d'enregistrer votre QR Code.\n"
       'Vérifiez votre connexion et réessayez.';
-  static const String publishTooManyMessage =
-      "Trop d'envois. Réessayez plus tard.";
 
   @override
   QrContentState build() => const QrContentState();
@@ -60,6 +63,14 @@ class QrContentViewModel extends Notifier<QrContentState> {
 
   void updateText(String text) {
     state = state.copyWith(text: TextQrData(text: text));
+  }
+
+  void updateWebsite(WebsiteQrData Function(WebsiteQrData site) update) {
+    state = state.copyWith(website: update(state.website));
+  }
+
+  void updateWifi(WifiQrData Function(WifiQrData wifi) update) {
+    state = state.copyWith(wifi: update(state.wifi));
   }
 
   void updateSocialPage(SocialPageData Function(SocialPageData page) update) {
@@ -139,11 +150,15 @@ class QrContentViewModel extends Notifier<QrContentState> {
     }
   }
 
-  // Génère le QR Code du type sélectionné. Renvoie `null` si le contenu
-  // est invalide ; les erreurs de ce type deviennent alors toutes visibles.
+  // Génère le QR Code du type sélectionné et l'enregistre sur le compte
+  // (création, ou mise à jour du QR Code en cours de modification). Renvoie
+  // `null` en cas d'échec : saisie invalide (les erreurs de ce type
+  // deviennent toutes visibles), envoi du fichier ou enregistrement refusé
+  // (le message est placé dans l'état).
   Future<QrCodeData?> generateQr() async {
     final type = ref.read(qrGeneratorViewModelProvider);
-    if (type == null) return null;
+    if (type == null || state.saving.isSaving) return null;
+    state = state.copyWith(saving: const SaveState());
 
     final linkedKind = switch (type) {
       QrType.cv => SharedFileKind.cv,
@@ -152,24 +167,34 @@ class QrContentViewModel extends Notifier<QrContentState> {
         SharedFileKind.businessCardImage,
       _ => null,
     };
-    final file = linkedKind == null ? null : await _upload(linkedKind);
-    final pageUrl = type == QrType.socialPage
-        ? await _publishSocialPage()
-        : null;
-    final payload = switch (type) {
-      _ when file != null => _qrService.generateLinkPayload(file.remoteUrl!),
-      _ when pageUrl != null => _qrService.generateLinkPayload(pageUrl),
+    // Contenu encodé directement dans le QR Code (types statiques).
+    final staticPayload = switch (type) {
       QrType.businessCard
           when linkedKind == null && state.isBusinessCardValid =>
         _qrService.generateBusinessCardPayload(state.businessCard),
       QrType.text when state.isTextValid => _qrService.generateTextPayload(
         state.text,
       ),
+      QrType.wifi when state.isWifiValid => _qrService.generateWifiPayload(
+        state.wifi,
+      ),
       _ => null,
     };
-
-    // Garde-fou : un contenu trop volumineux ne produirait pas de QR Code.
-    if (payload == null || !QrService.fitsInQrCode(payload)) {
+    final isValid = switch (type) {
+      QrType.cv => true,
+      QrType.businessCard when linkedKind != null => true,
+      QrType.socialMedia => state.isSocialPageValid,
+      QrType.website => state.isWebsiteValid,
+      _ =>
+        staticPayload != null &&
+            // Garde-fou : un contenu trop volumineux ne produirait pas de
+            // QR Code.
+            QrService.fitsInQrCode(staticPayload),
+    };
+    final file = isValid && linkedKind != null
+        ? await _upload(linkedKind)
+        : null;
+    if (!isValid || (linkedKind != null && file == null)) {
       state = state.copyWith(
         showErrorsFor: {...state.showErrorsFor, type},
         failedGenerations: state.failedGenerations + 1,
@@ -177,12 +202,80 @@ class QrContentViewModel extends Notifier<QrContentState> {
       return null;
     }
 
+    final saved = await _save(type, file);
+    if (saved == null) return null;
+    final payload =
+        staticPayload ??
+        switch (type) {
+          QrType.socialMedia => _qrService.generateSocialMediaPayload(
+            saved.publicUrl,
+          ),
+          QrType.website => _qrService.generateWebsitePayload(saved.publicUrl),
+          _ => _qrService.generateLinkPayload(saved.publicUrl),
+        };
     final result = QrCodeData(type: type, payload: payload, file: file);
-    state = state.copyWith(result: result);
+    state = state.copyWith(result: result, editing: saved);
     return result;
   }
 
-  // Met le fichier en ligne si nécessaire et le renvoie avec son URL, ou
+  // Ouvre un QR Code enregistré (historique) : sa saisie remplit le
+  // formulaire de son type, et le résultat est prêt à être affiché.
+  // Générer à nouveau le mettra à jour (même adresse publique).
+  QrCodeData openSaved(SavedQrCode saved) {
+    reset();
+    ref.read(qrGeneratorViewModelProvider.notifier).selectQrType(saved.type);
+    final content = saved.content;
+    final result = resultFor(saved);
+    final file = result.file;
+    final uploaded = FileState(status: FileStatus.uploaded, file: file);
+
+    state = switch (saved.type) {
+      QrType.text => state.copyWith(text: TextQrData.fromJson(content)),
+      QrType.wifi => state.copyWith(wifi: WifiQrData.fromJson(content)),
+      QrType.website => state.copyWith(
+        website: WebsiteQrData.fromJson(saved.title, content),
+      ),
+      QrType.socialMedia => state.copyWith(
+        socialPage: SocialPageData.fromJson(saved.title, content),
+      ),
+      QrType.cv => state.copyWith(cv: uploaded),
+      QrType.businessCard when file != null => state.copyWith(
+        businessCardMode: BusinessCardMode.image,
+        cardImage: uploaded,
+      ),
+      QrType.businessCard => state.copyWith(
+        businessCard: BusinessCardData.fromJson(saved.section('details')),
+        businessCardRevision: state.businessCardRevision + 1,
+      ),
+    };
+    state = state.copyWith(result: result, editing: saved);
+    return result;
+  }
+
+  // QR Code d'un enregistrement, sans modifier la saisie en cours
+  // (partage depuis l'historique).
+  QrCodeData resultFor(SavedQrCode saved) {
+    final content = saved.content;
+    final fileId = content['file_id'];
+    final file = fileId is String
+        ? SharedFile(
+            name: content['filename'] is String
+                ? content['filename'] as String
+                : saved.title,
+            // Taille inconnue : le fichier est déjà en ligne.
+            size: 0,
+            remoteId: fileId,
+            remoteUrl: saved.publicUrl,
+          )
+        : null;
+    return QrCodeData(
+      type: saved.type,
+      payload: _qrService.generateSavedPayload(saved),
+      file: file,
+    );
+  }
+
+  // Met le fichier en ligne si nécessaire et le renvoie avec son identifiant, ou
   // `null` en cas d'échec (le message d'erreur est alors placé dans l'état).
   Future<SharedFile?> _upload(SharedFileKind kind) async {
     final current = state.fileState(kind);
@@ -192,12 +285,14 @@ class QrContentViewModel extends Notifier<QrContentState> {
       _setFile(kind, current.withError(kind.missingMessage));
       return null;
     }
-    if (file.remoteUrl != null) return file;
+    if (file.isUploaded) return file;
 
     _setFile(kind, FileState(status: FileStatus.uploading, file: file));
     try {
-      final url = await ref.read(fileStorageServiceProvider).upload(file, kind);
-      final uploaded = file.withRemoteUrl(url);
+      final remote = await ref
+          .read(fileStorageServiceProvider)
+          .upload(file, kind);
+      final uploaded = file.withRemote(remote);
       _setFile(kind, FileState(status: FileStatus.uploaded, file: uploaded));
       return uploaded;
     } catch (error, stackTrace) {
@@ -212,6 +307,14 @@ class QrContentViewModel extends Notifier<QrContentState> {
           file: file,
           errorMessage: unavailable
               ? kind.unavailableMessage
+              // Les refus du serveur (format, taille, espace plein) ont
+              // leur propre message ; les pannes réseau gardent celui du
+              // type de fichier.
+              : error is ApiException &&
+                    error.kind != ApiErrorKind.offline &&
+                    error.kind != ApiErrorKind.timeout &&
+                    error.kind != ApiErrorKind.server
+              ? error.message
               : kind.uploadFailedMessage,
         ),
       );
@@ -219,37 +322,93 @@ class QrContentViewModel extends Notifier<QrContentState> {
     }
   }
 
-  // Publie la page si elle est valide et renvoie son URL, ou `null` (le
-  // message d'erreur éventuel est alors placé dans l'état).
-  Future<String?> _publishSocialPage() async {
-    if (state.socialPagePublish.isPublishing || !state.isSocialPageValid) {
-      return null;
-    }
-    final service = ref.read(socialPageServiceProvider);
+  // Enregistre le QR Code sur le compte, ou renvoie `null` (message
+  // d'erreur dans l'état).
+  Future<SavedQrCode?> _save(QrType type, SharedFile? file) async {
+    final service = ref.read(qrCodeServiceProvider);
     if (service == null) {
-      _setPublish(const PublishState(errorMessage: publishUnavailableMessage));
+      _setSave(SaveState(errorMessage: saveUnavailableMessage, type: type));
       return null;
     }
+    final title = _titleFor(type, file);
+    final content = _contentFor(type, file);
+    final editing = state.editing?.type == type ? state.editing : null;
 
-    _setPublish(const PublishState(isPublishing: true));
+    _setSave(SaveState(isSaving: true, type: type));
     try {
-      final url = await service.publish(state.socialPage);
-      _setPublish(const PublishState());
-      return url;
+      final saved = editing == null
+          ? await service.create(type, title: title, content: content)
+          : await service.update(
+              editing.id,
+              type,
+              title: title,
+              content: content,
+            );
+      _setSave(const SaveState());
+      return saved;
     } catch (error, stackTrace) {
-      _log('Échec de la publication de la page', error, stackTrace);
-      final tooMany = error is SocialPageException && error.statusCode == 429;
-      _setPublish(
-        PublishState(
-          errorMessage: tooMany ? publishTooManyMessage : publishFailedMessage,
+      // Jamais le contenu dans les logs (mot de passe Wi-Fi).
+      _log("Échec de l'enregistrement (${type.name})", error, stackTrace);
+      _setSave(
+        SaveState(
+          errorMessage: error is ApiException
+              ? error.message
+              : saveFailedMessage,
+          type: type,
         ),
       );
       return null;
     }
   }
 
-  void _setPublish(PublishState publish) =>
-      state = state.copyWith(socialPagePublish: publish);
+  // Titre affiché dans « Mes QR Codes » (100 caractères au plus, comme
+  // sur le serveur).
+  String _titleFor(QrType type, SharedFile? file) {
+    String clip(String text, int max) {
+      final line = text.trim().split('\n').first.trim();
+      return line.length > max ? '${line.substring(0, max - 1)}…' : line;
+    }
+
+    final title = switch (type) {
+      QrType.socialMedia => state.socialPage.title,
+      QrType.website =>
+        state.website.title.trim().isNotEmpty
+            ? state.website.title
+            : Uri.tryParse(
+                    WebsiteQrData.normalizeUrl(state.website.url),
+                  )?.host ??
+                  '',
+      QrType.wifi => 'Wi-Fi ${state.wifi.ssid.trim()}',
+      // Début du texte, pour le reconnaître dans la liste.
+      QrType.text => clip(state.text.text, 60),
+      QrType.cv => file?.name ?? '',
+      QrType.businessCard when file != null => type.title,
+      QrType.businessCard =>
+        '${state.businessCard.firstName.trim()} '
+            '${state.businessCard.lastName.trim()}',
+    };
+    final clipped = clip(title, WebsiteQrData.maxTitleLength);
+    return clipped.isEmpty ? type.title : clipped;
+  }
+
+  Map<String, Object?> _contentFor(QrType type, SharedFile? file) =>
+      switch (type) {
+        QrType.text => state.text.toJson(),
+        QrType.wifi => state.wifi.toJson(),
+        QrType.website => state.website.toJson(),
+        QrType.socialMedia => state.socialPage.toJson(),
+        QrType.cv => {'file_id': file?.remoteId},
+        QrType.businessCard when file != null => {
+          'mode': 'image',
+          'file_id': file.remoteId,
+        },
+        QrType.businessCard => {
+          'mode': 'details',
+          'details': state.businessCard.toJson(),
+        },
+      };
+
+  void _setSave(SaveState saving) => state = state.copyWith(saving: saving);
 
   void _setFile(SharedFileKind kind, FileState file) =>
       state = state.withFileState(kind, file);
@@ -328,8 +487,17 @@ final livePreviewProvider = Provider<LivePreview?>((ref) {
         );
       }
       return fromPayload(service.generateBusinessCardPayload(card));
-    // L'URL d'un fichier ou d'une page n'existe qu'après sa mise en ligne.
-    case QrType.cv || QrType.socialPage || null:
+    case QrType.wifi:
+      final wifi = ref.watch(qrContentViewModelProvider.select((s) => s.wifi));
+      if (!QrContentState.isValidWifi(wifi)) {
+        return const LivePreview.placeholder(
+          "Renseignez le nom du réseau et son mot de passe pour voir l'aperçu.",
+        );
+      }
+      return fromPayload(service.generateWifiPayload(wifi));
+    // L'adresse publique d'un fichier, d'une page ou d'un site n'existe
+    // qu'après l'enregistrement.
+    case QrType.cv || QrType.socialMedia || QrType.website || null:
       return null;
   }
 });

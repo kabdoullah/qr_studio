@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/widgets/error_message.dart';
 import '../models/qr_type.dart';
 import '../models/social_network.dart';
 import '../models/social_page_data.dart';
@@ -55,12 +54,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
     );
     final showAllErrors = ref.watch(
       qrContentViewModelProvider.select(
-        (s) => s.showErrorsFor.contains(QrType.socialPage),
-      ),
-    );
-    final publishError = ref.watch(
-      qrContentViewModelProvider.select(
-        (s) => s.socialPagePublish.errorMessage,
+        (s) => s.showErrorsFor.contains(QrType.socialMedia),
       ),
     );
     final viewModel = ref.read(qrContentViewModelProvider.notifier);
@@ -77,12 +71,18 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(
+            'Partagez tous vos réseaux avec un seul QR Code.',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           const _SectionTitle('Votre page'),
           TextFormField(
             initialValue: page.title,
             decoration: const InputDecoration(
               labelText: 'Titre *',
-              hintText: 'Votre nom ou celui de votre marque',
+              hintText: 'Mes réseaux sociaux',
             ),
             maxLength: SocialPageData.maxTitleLength,
             textInputAction: TextInputAction.next,
@@ -97,7 +97,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
             initialValue: page.bio,
             decoration: const InputDecoration(
               labelText: 'Description',
-              hintText: 'Quelques mots sur vous',
+              hintText: 'Retrouvez-moi…',
               alignLabelWithHint: true,
             ),
             minLines: 2,
@@ -111,7 +111,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
             scrollPadding: const EdgeInsets.only(bottom: 120),
           ),
           _SectionTitle(
-            'Vos réseaux',
+            'Mes réseaux',
             subtitle: '${links.length} / ${SocialPageData.maxLinks}',
           ),
           for (final (index, link) in links.indexed)
@@ -145,15 +145,12 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Votre page sera publique pour toute personne ayant le QR Code.',
+            'Votre page sera publique pour toute personne ayant le QR Code. '
+            'Vous pourrez la modifier ou la supprimer depuis « Mes QR Codes ».',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          if (publishError != null) ...[
-            const SizedBox(height: 16),
-            ErrorMessage(publishError),
-          ],
         ],
       ),
     );
@@ -236,32 +233,6 @@ class _NetworkSheet extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-// Confirmation affichée avant la publication : la page devient publique.
-class SocialPagePublishDialog extends StatelessWidget {
-  const SocialPagePublishDialog({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Publier votre page ?'),
-      content: const Text(
-        'Cette page sera publique pour toute personne ayant le QR Code. '
-        "Elle ne pourra pas être supprimée depuis l'application.",
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Publier'),
-        ),
-      ],
     );
   }
 }
