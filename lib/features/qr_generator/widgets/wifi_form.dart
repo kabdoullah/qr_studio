@@ -55,7 +55,7 @@ class _WifiFormState extends ConsumerState<WifiForm> {
     return Form(
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
-          : AutovalidateMode.onUserInteraction,
+          : AutovalidateMode.disabled,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -66,6 +66,7 @@ class _WifiFormState extends ConsumerState<WifiForm> {
                 'le QR Code pour se connecter.',
           ),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: initial.ssid,
             decoration: const InputDecoration(
               labelText: 'Nom du réseau (SSID) *',
@@ -79,6 +80,7 @@ class _WifiFormState extends ConsumerState<WifiForm> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<WifiSecurity>(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: security,
             // Libellés sur toute la largeur, coupés si le texte est agrandi.
             isExpanded: true,
@@ -97,6 +99,7 @@ class _WifiFormState extends ConsumerState<WifiForm> {
           ),
           const SizedBox(height: 16),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             controller: _password,
             enabled: security.needsPassword,
             obscureText: _obscured,

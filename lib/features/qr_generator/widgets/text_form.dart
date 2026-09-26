@@ -24,7 +24,7 @@ class TextForm extends ConsumerWidget {
     return Form(
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
-          : AutovalidateMode.onUserInteraction,
+          : AutovalidateMode.disabled,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -33,6 +33,7 @@ class TextForm extends ConsumerWidget {
             description: 'Écrivez le contenu que vous souhaitez partager.',
           ),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: initialText,
             minLines: 5,
             maxLines: 10,

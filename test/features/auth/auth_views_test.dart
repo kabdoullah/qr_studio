@@ -46,6 +46,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('saisir l’email ne signale pas le mot de passe vide', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.enterText(field('Email'), 'awa@example.com');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Veuillez saisir votre mot de passe.'), findsNothing);
+  });
+
   testWidgets('sans session, l’application ouvre la connexion', (tester) async {
     await pumpApp(tester);
 
