@@ -69,7 +69,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
       key: _formKey,
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
-          : AutovalidateMode.onUserInteraction,
+          : AutovalidateMode.disabled,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -78,6 +78,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
             description: 'Partagez tous vos réseaux avec un seul QR Code.',
           ),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: page.title,
             decoration: const InputDecoration(
               labelText: 'Titre *',
@@ -93,6 +94,7 @@ class _SocialPageFormState extends ConsumerState<SocialPageForm> {
           ),
           const SizedBox(height: 8),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: page.bio,
             decoration: const InputDecoration(
               labelText: 'Description',
@@ -171,6 +173,7 @@ class _LinkField extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         initialValue: link.value,
         decoration: InputDecoration(
           labelText: network.label,

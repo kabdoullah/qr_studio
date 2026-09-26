@@ -26,7 +26,7 @@ class WebsiteForm extends ConsumerWidget {
     return Form(
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
-          : AutovalidateMode.onUserInteraction,
+          : AutovalidateMode.disabled,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -37,6 +37,7 @@ class WebsiteForm extends ConsumerWidget {
                 "l'adresse plus tard sans le réimprimer.",
           ),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: site.title,
             decoration: const InputDecoration(
               labelText: 'Titre',
@@ -51,6 +52,7 @@ class WebsiteForm extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           TextFormField(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: site.url,
             decoration: const InputDecoration(
               labelText: 'URL du site *',

@@ -67,7 +67,7 @@ class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
       key: _formKey,
       autovalidateMode: showAllErrors
           ? AutovalidateMode.always
-          : AutovalidateMode.onUserInteraction,
+          : AutovalidateMode.disabled,
       child: AutofillGroup(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -256,6 +256,7 @@ class _Field extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         initialValue: initialValue,
         decoration: InputDecoration(labelText: label, hintText: hint),
         keyboardType: keyboardType,

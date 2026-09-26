@@ -3,11 +3,14 @@
     "short_name": "QR Studio",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#FFFFFF",
-    "theme_color": "#FFFFFF",
+    "background_color": "#F8FAFC",
+    "theme_color": "#4F46E5",
     "description": "Créez un QR Code pour votre carte de visite, votre CV ou un texte.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "lang": "fr",
+    "id": "/",
+    "scope": "/",
     "icons": [
         {
             "src": "icons/Icon-192.png",
@@ -31,8 +34,5 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ],
-    "lang": "fr",
-    "id": "/",
-    "scope": "/"
+    ]
 }

@@ -32,6 +32,41 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  group('validation champ par champ', () {
+    testWidgets('saisir le réseau ne signale pas le mot de passe vide', (
+      tester,
+    ) async {
+      await open(tester, QrType.wifi);
+
+      await tester.enterText(field('Nom du réseau (SSID) *'), 'Maison');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Veuillez saisir le mot de passe.'), findsNothing);
+    });
+
+    testWidgets('saisir le titre ne signale pas l’URL vide', (tester) async {
+      await open(tester, QrType.website);
+
+      await tester.enterText(field('Titre'), 'Mon portfolio');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Veuillez'), findsNothing);
+    });
+
+    testWidgets('Générer signale tous les champs, puis chacun se corrige', (
+      tester,
+    ) async {
+      await open(tester, QrType.wifi);
+
+      await generate(tester);
+      expect(find.text('Veuillez saisir le mot de passe.'), findsOneWidget);
+
+      await tester.enterText(field('Mot de passe *'), 'motdepasse');
+      await tester.pumpAndSettle();
+      expect(find.text('Veuillez saisir le mot de passe.'), findsNothing);
+    });
+  });
+
   group('Site Web', () {
     testWidgets('URL invalide signalée en ligne', (tester) async {
       await open(tester, QrType.website);

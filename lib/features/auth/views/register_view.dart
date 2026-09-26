@@ -65,11 +65,11 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       children: [
         Form(
           key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextFormField(
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 controller: _firstName,
                 decoration: const InputDecoration(labelText: 'Prénom'),
                 textCapitalization: TextCapitalization.words,
@@ -83,6 +83,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 controller: _lastName,
                 decoration: const InputDecoration(labelText: 'Nom'),
                 textCapitalization: TextCapitalization.words,
@@ -94,6 +95,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 controller: _email,
                 decoration: const InputDecoration(labelText: 'Email'),
                 keyboardType: TextInputType.emailAddress,
