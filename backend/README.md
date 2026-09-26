@@ -1,13 +1,56 @@
 # QR Studio — backend
 
-Petit serveur FastAPI qui met en ligne les CV (PDF), les images de carte
-de visite et les pages de réseaux sociaux. L'application encode dans le QR
-Code le lien renvoyé ; la personne qui scanne l'ouvre dans son navigateur.
+Serveur FastAPI de QR Studio : comptes utilisateurs (JWT), QR Codes
+rattachés à chaque compte et leur page publique `/q/{slug}`, mise en ligne
+des CV (PDF) et des images de carte de visite.
+
+Pour les QR Codes dynamiques (CV, image de carte, réseaux sociaux, site
+web), l'application encode `https://…/q/{slug}` : le contenu peut être
+modifié sans réimprimer le QR Code (le slug ne change jamais). Le texte, le
+Wi-Fi et les coordonnées de carte de visite restent encodés directement
+dans le QR Code (le téléphone qui scanne doit les lire sans réseau) ; ils
+sont aussi enregistrés sur le compte.
+
+## Comptes et QR Codes
+
+| Méthode | Chemin                         | Rôle                                              |
+|---------|--------------------------------|---------------------------------------------------|
+| POST    | `/api/v1/auth/register`        | Création de compte (`email`, `password` ≥ 8, `first_name`, `last_name`) → `201` |
+| POST    | `/api/v1/auth/login`           | `{"access_token", "token_type": "bearer"}`        |
+| GET     | `/api/v1/auth/me`              | Compte du jeton (`Authorization: Bearer …`)       |
+| GET     | `/api/v1/qr-codes`             | QR Codes du compte, plus récents d'abord          |
+| POST    | `/api/v1/qr-codes`             | Création : `{"type", "title", "content"}`         |
+| GET/PUT/DELETE | `/api/v1/qr-codes/{id}` | Lecture, modification (même slug), suppression   |
+| GET     | `/api/v1/public/q/{slug}`      | Contenu public, sans compte (JSON)                |
+| GET     | `/q/{slug}`                    | Page publique ouverte au scan (HTML, sans JavaScript) |
+
+- **Propriété** : un QR Code n'est visible, modifiable et supprimable que
+  par son compte ; celui d'un autre compte renvoie `404`.
+- **Types et `content`** : `text` (`text`, 1000 caractères), `website`
+  (`url`, https ; http seulement si `APP_ENV=development`), `wifi` (`ssid`,
+  `security` parmi `none`/`WEP`/`WPA`/`WPA2`/`WPA3`, `password`, `hidden`),
+  `social_media` (`description` ≤ 300, 1 à 15 `links` `{platform, url,
+  label?, is_visible?}` ; réseaux dans `app/social_networks.py`), `cv`
+  (`file_id` d'un PDF envoyé par ce compte), `business_card` (`mode`
+  `details` + `details`, ou `image` + `file_id`). Titre : 1 à 100 caractères.
+- **Wi-Fi** : le mot de passe n'est renvoyé qu'au propriétaire, jamais par
+  l'accès public ; les erreurs `422` ne renvoient jamais les valeurs saisies.
+- **Suppression** : réelle (contenu et fichier) ; l'adresse `/q/{slug}`
+  affiche ensuite « QR Code indisponible » (`404`).
+
+Schéma : SQLAlchemy 2 async (asyncpg en production, SQLite en
+développement), migré par Alembic (`migrations/`). Tables `users`,
+`qr_codes` et une table de contenu par type (`texts`, `websites`,
+`wifi_profiles`, `cv_documents`, `business_card_profiles`,
+`social_media_profiles`, `social_media_links`).
+
+## Fichiers et anciens liens
+
 
 | Méthode | Chemin            | Rôle                                              |
 |---------|-------------------|---------------------------------------------------|
-| POST    | `/api/v1/cvs`     | Envoi d'un PDF (champ multipart `file`)           |
-| POST    | `/api/v1/cards`   | Envoi d'une image JPEG, PNG ou WebP (`file`)      |
+| POST    | `/api/v1/cvs`     | Envoi d'un PDF (champ multipart `file`), compte requis |
+| POST    | `/api/v1/cards`   | Envoi d'une image JPEG, PNG ou WebP (`file`), compte requis |
 | GET     | `/cv/{id}`        | Affiche le PDF                                    |
 | GET     | `/card/{id}`      | Affiche l'image                                   |
 | POST    | `/api/v1/business-cards` | Publie les coordonnées d'une carte (JSON)  |
@@ -27,7 +70,9 @@ espaces ignorés) n'est pas enregistrée deux fois. La recherche porte sur le
 nom, la fonction, l'entreprise et la ville. Il n'existe pas de
 suppression : retirer une carte se fait directement dans la base
 (`DELETE FROM business_cards WHERE id = '…'`).
-**Pages de réseaux sociaux** : `{"title", "bio", "links": [{"network",
+**Pages de réseaux sociaux `/s/` (anciennes)** : conservées pour les QR
+Codes déjà imprimés ; l’application crée désormais des QR Codes
+`social_media` (modifiables). `{"title", "bio", "links": [{"network",
 "url"}]}` → `201 {"id", "url": "https://.../s/<id>"}`. Titre obligatoire
 (80 caractères maximum), description facultative (300), 1 à 10 liens.
 Réseaux : `instagram`, `tiktok`, `facebook`, `x`, `linkedin`, `youtube`,
@@ -61,7 +106,13 @@ Stockage :
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/alembic upgrade head    # crée ou met à jour le schéma
 ```
+
+Après une modification des modèles SQLAlchemy :
+`.venv/bin/alembic revision --autogenerate -m "…"`, puis relisez la
+migration générée. Sur Render, `alembic upgrade head` s'exécute avant
+chaque démarrage (`render.yaml`).
 
 ## Tests
 
@@ -101,7 +152,12 @@ Android, réseau local sur iOS. En production, servez l'API en HTTPS.
 
 | Variable                   | Défaut                                   | Rôle                                  |
 |----------------------------|------------------------------------------|---------------------------------------|
-| `DATABASE_URL`             | —                                        | Chaîne de connexion PostgreSQL (Neon) ; sans elle, stockage local |
+| `APP_ENV`                  | `development` (`production` sur Render)  | En développement : sites en http acceptés, clé JWT par défaut |
+| `DATABASE_URL`             | —                                        | Chaîne PostgreSQL (Neon), `postgresql://` ou `postgresql+asyncpg://` ; sans elle, stockage local |
+| `JWT_SECRET_KEY`           | — (obligatoire hors développement)       | Signature des jetons de session       |
+| `JWT_ALGORITHM`            | `HS256`                                  | Algorithme des jetons                 |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30`                                  | Durée d'une session                   |
+| `PUBLIC_BASE_URL`          | `QR_STUDIO_PUBLIC_URL`                   | Base des adresses encodées (`/q/…`, fichiers) |
 | `QR_STUDIO_PUBLIC_URL`     | `RENDER_EXTERNAL_URL`, sinon `http://localhost:8000` | Base des liens encodés dans les QR |
 | `QR_STUDIO_MAX_STORAGE_MB` | `400`                                    | Espace total autorisé pour les fichiers |
 | `QR_STUDIO_DATA_DIR`       | `data`                                   | Stockage local (sans base)            |
@@ -113,9 +169,11 @@ par exemple `https://qr-studio-web.onrender.com,http://localhost:8080`. En
 local, `flutter run -d chrome` choisit un port différent à chaque lancement :
 fixez-le avec `--web-port 8080`.
 
-Sur Render (`RENDER` défini), le serveur **refuse de démarrer sans
-`DATABASE_URL`** : le disque y est effacé à chaque déploiement, et les QR
-Codes déjà partagés pointeraient vers des fichiers disparus.
+Voir aussi `.env.example`. Sur Render (`RENDER` défini), le serveur
+**refuse de démarrer sans `DATABASE_URL`** : le disque y est effacé à
+chaque déploiement, et les QR Codes déjà partagés pointeraient vers des
+fichiers disparus. Hors développement, il refuse aussi de démarrer sans
+`JWT_SECRET_KEY` (générée par Render via `render.yaml`).
 
 ## Déploiement sur Render + Neon
 
