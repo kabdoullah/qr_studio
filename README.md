@@ -60,7 +60,15 @@ flutter pub get
 dart run build_runner build   # providers Riverpod générés (*.g.dart)
 ```
 
-L'application se configure au lancement par `--dart-define` :
+L'application se configure au lancement par un fichier JSON passé à
+`--dart-define-from-file` (dossier [`config/`](config/)) :
+
+- `config/prod.json` : backend de production (versionné) ;
+- `config/local.json` : backend local, créé à partir de
+  `config/local.example.json` (ignoré par git, car il contient l'adresse IP
+  du Mac).
+
+Variables reconnues :
 
 | Variable              | Rôle                                                        |
 |-----------------------|-------------------------------------------------------------|
@@ -74,8 +82,7 @@ et Facebook restent sur le serveur.
 ### Avec le backend en production
 
 ```bash
-flutter run --dart-define=QR_STUDIO_API_URL=https://qr-studio-api-q71x.onrender.com \
-  --dart-define=GOOGLE_CLIENT_ID=788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+flutter run --dart-define-from-file=config/prod.json
 ```
 
 ### Avec le backend en local
@@ -93,13 +100,14 @@ GOOGLE_CLIENT_ID=788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleuserco
 Puis, depuis la racine :
 
 ```bash
-# Web (port fixe : il doit être autorisé par le CORS et par le client Google)
-flutter run -d chrome --web-port 8080 --dart-define=QR_STUDIO_API_URL=http://localhost:8000 \
-  --dart-define=GOOGLE_CLIENT_ID=788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+cp config/local.example.json config/local.json   # une seule fois
 
-# Téléphone Android sur le même Wi-Fi (debug : seul mode qui autorise le http)
-flutter run --dart-define=QR_STUDIO_API_URL=http://<ip-du-mac>:8000 \
-  --dart-define=GOOGLE_CLIENT_ID=788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+# Web (port fixe : il doit être autorisé par le CORS et par le client Google)
+flutter run -d chrome --web-port 8080 --dart-define-from-file=config/local.json
+
+# Téléphone Android sur le même Wi-Fi (debug : seul mode qui autorise le http) :
+# remplacer localhost par l'IP du Mac dans config/local.json
+flutter run --dart-define-from-file=config/local.json
 ```
 
 La connexion Google sur Android exige que l'APK soit signé par une clé dont
@@ -119,12 +127,10 @@ cd backend && .venv/bin/python -m pytest   # SQLite et PostgreSQL embarqué
 
 ```bash
 # APK Android (signé pour l'instant avec la clé de debug, installé directement)
-flutter build apk --release --dart-define=QR_STUDIO_API_URL=https://qr-studio-api-q71x.onrender.com \
-  --dart-define=GOOGLE_CLIENT_ID=788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+flutter build apk --release --dart-define-from-file=config/prod.json
 
 # PWA
-flutter build web --release --dart-define=QR_STUDIO_API_URL=https://qr-studio-api-q71x.onrender.com \
-  --dart-define=GOOGLE_CLIENT_ID=788583080594-grau0tdej4k2bpokotf94dkg8c7donm7.apps.googleusercontent.com
+flutter build web --release --dart-define-from-file=config/prod.json
 ```
 
 Le backend et la PWA sont déployés sur Render par [`render.yaml`](render.yaml),
