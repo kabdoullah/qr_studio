@@ -43,6 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# Swift Package Manager (Xcode) : régénéré à chaque build iOS
+**/xcshareddata/swiftpm/
 
 # Réglages d'éditeur propres à chaque machine
 .vscode/
