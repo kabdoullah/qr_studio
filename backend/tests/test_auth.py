@@ -158,7 +158,7 @@ def test_me_returns_the_connected_account(client):
     assert body["first_name"] == "Jean"
     assert set(body) == {
         "id", "email", "first_name", "last_name", "avatar_url",
-        "email_verified", "is_active", "created_at",
+        "email_verified", "is_active", "created_at", "is_anonymous",
     }
 
 

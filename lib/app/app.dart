@@ -13,13 +13,15 @@ class QrStudioApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Déconnexion : la saisie et l'historique enregistré du compte
-    // précédent ne doivent rester ni en mémoire ni sur l'appareil.
-    ref.listen(authViewModelProvider.select((s) => s.isAuthenticated), (
-      wasAuthenticated,
-      isAuthenticated,
+    // Changement d'utilisateur (déconnexion, connexion à un autre compte) :
+    // la saisie et l'historique enregistré du précédent ne doivent rester
+    // ni en mémoire ni sur l'appareil. La conversion d'un utilisateur
+    // anonyme en compte garde le même `id` : rien n'est effacé.
+    ref.listen(authViewModelProvider.select((s) => s.user?.id), (
+      previousId,
+      userId,
     ) {
-      if (wasAuthenticated == true && !isAuthenticated) {
+      if (previousId != null && userId != previousId) {
         ref.read(qrContentViewModelProvider.notifier).startOver();
         ref.read(qrHistoryCacheProvider).clear();
       }

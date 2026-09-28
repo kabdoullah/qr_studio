@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/app/app.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/views/qr_result_view.dart';
+import 'package:qr_studio/features/qr_generator/widgets/qr_preview.dart';
 import 'package:qr_studio/features/qr_generator/widgets/qr_live_preview.dart';
 
 import '../../../helpers/fake_services.dart';
@@ -80,7 +81,7 @@ void main() {
       );
     });
 
-    testWidgets('génère le QR Code vers l’adresse publique', (tester) async {
+    testWidgets('génère le QR Code vers le site lui-même', (tester) async {
       await open(tester, QrType.website);
 
       await tester.enterText(field('Titre'), 'Mon portfolio');
@@ -88,7 +89,11 @@ void main() {
       await generate(tester);
 
       expect(find.byType(QrResultView), findsOneWidget);
-      expect(find.text(FakeQrCodeService.publicUrl(1)), findsOneWidget);
+      // Aucune page intermédiaire : le QR Code contient l'adresse du site.
+      expect(
+        tester.widget<QrPreview>(find.byType(QrPreview)).data,
+        'https://example.com',
+      );
       expect(service.created.single.content, {'url': 'https://example.com'});
     });
   });

@@ -296,12 +296,20 @@ void main() {
   group('écran Mes QR Codes', () {
     late FakeQrShareService sharer;
 
-    Future<void> openHistory(WidgetTester tester) async {
+    // `anonymous` : premier lancement, sans compte.
+    Future<void> openHistory(
+      WidgetTester tester, {
+      bool anonymous = false,
+    }) async {
       sharer = FakeQrShareService();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...signedIn(qrCodes: service, historyCache: cache),
+            ...signedIn(
+              qrCodes: service,
+              historyCache: cache,
+              storage: anonymous ? FakeTokenStorage() : null,
+            ),
             qrShareServiceProvider.overrideWithValue(sharer),
             qrExportServiceProvider.overrideWithValue(FakeQrExportService()),
           ],
@@ -309,7 +317,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Mon compte'));
+      await tester.tap(find.text('Paramètres'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mes QR Codes'));
       await tester.pumpAndSettle();
@@ -327,6 +335,55 @@ void main() {
       expect(find.byType(QrHistoryView), findsOneWidget);
       expect(find.text('Mon portfolio'), findsOneWidget);
       expect(find.text('Wi-Fi Maison'), findsOneWidget);
+    });
+
+    const otherDevice = 'Les retrouver sur un autre appareil';
+
+    testWidgets('utilisateur anonyme : ses QR Codes, puis une simple mention '
+        'du compte en bas de liste', (tester) async {
+      await openHistory(tester, anonymous: true);
+
+      expect(find.text('Mon portfolio'), findsOneWidget);
+      expect(find.text('Créer un compte'), findsNothing);
+      await tester.ensureVisible(find.text(otherDevice));
+      await tester.tap(find.text(otherDevice));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Créer mon compte'), findsOneWidget);
+    });
+
+    testWidgets('ouvert avant la fin de l’ouverture de session : la liste '
+        'arrive ensuite', (tester) async {
+      final auth = FakeAuthService()..gate = Completer<void>();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: signedIn(
+            auth: auth,
+            storage: FakeTokenStorage(),
+            qrCodes: service,
+            historyCache: cache,
+          ),
+          child: const QrStudioApp(),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Paramètres'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mes QR Codes'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Mon portfolio'), findsNothing);
+
+      auth.gate!.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mon portfolio'), findsOneWidget);
+    });
+
+    testWidgets('compte enregistré : aucune mention', (tester) async {
+      await openHistory(tester);
+
+      expect(find.text(otherDevice), findsNothing);
     });
 
     testWidgets('la recherche filtre par titre ou par type', (tester) async {
@@ -373,7 +430,7 @@ void main() {
       expect(find.byType(QrResultView), findsOneWidget);
       expect(
         tester.widget<QrPreview>(find.byType(QrPreview)).data,
-        'https://qr.test/q/site',
+        'https://example.com',
       );
     });
 
@@ -430,7 +487,7 @@ void main() {
 
       service.items.removeAt(0);
       service.gate = Completer<void>();
-      await tester.tap(find.text('Mon compte'));
+      await tester.tap(find.text('Paramètres'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mes QR Codes'));
       await tester.pump();
@@ -490,7 +547,7 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Mon compte'));
+      await tester.tap(find.text('Paramètres'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Se déconnecter'));
       await tester.pumpAndSettle();

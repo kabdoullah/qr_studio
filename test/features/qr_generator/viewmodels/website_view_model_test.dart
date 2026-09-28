@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_studio/features/auth/viewmodels/auth_view_model.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
-import 'package:qr_studio/features/qr_generator/services/qr_code_service.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_state.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_view_model.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_generator_view_model.dart';
+
+import 'package:qr_studio/core/network/api_client.dart';
 
 import '../../../helpers/fake_services.dart';
 
@@ -19,9 +23,7 @@ void main() {
 
   setUp(() {
     service = FakeQrCodeService();
-    container = ProviderContainer(
-      overrides: [qrCodeServiceProvider.overrideWithValue(service)],
-    );
+    container = ProviderContainer(overrides: signedIn(qrCodes: service));
     container
         .read(qrGeneratorViewModelProvider.notifier)
         .selectQrType(QrType.website);
@@ -58,15 +60,15 @@ void main() {
     });
   });
 
-  test('enregistre le site et encode l’adresse publique', () async {
+  test('enregistre le site et encode directement son adresse', () async {
     viewModel().updateWebsite(
       (s) => s.copyWith(title: 'Mon portfolio', url: 'mon-site.com'),
     );
 
     final result = await viewModel().generateQr();
 
-    // Le QR Code contient l'adresse QR Studio, pas celle du site.
-    expect(result?.payload, FakeQrCodeService.publicUrl(1));
+    // Aucune page intermédiaire : le scan ouvre le site.
+    expect(result?.payload, 'https://mon-site.com');
     expect(result?.isOnlineLink, isTrue);
     expect(service.created.single.title, 'Mon portfolio');
     expect(service.created.single.content, {'url': 'https://mon-site.com'});
@@ -88,7 +90,7 @@ void main() {
     expect(state().showErrorsFor, contains(QrType.website));
   });
 
-  test('modifier l’URL garde la même adresse publique', () async {
+  test('modifier l’URL met à jour le même enregistrement', () async {
     viewModel().updateWebsite((s) => s.copyWith(url: 'https://ancien.com'));
     await viewModel().generateQr();
 
@@ -97,12 +99,74 @@ void main() {
 
     expect(service.updated, ['qr1']);
     expect(service.items.single.content, {'url': 'https://nouveau.com'});
-    expect(result?.payload, FakeQrCodeService.publicUrl(1));
+    expect(result?.payload, 'https://nouveau.com');
   });
 
-  test('pas d’aperçu avant enregistrement', () {
-    viewModel().updateWebsite((s) => s.copyWith(url: 'https://site.com'));
+  test('aperçu en direct de l’adresse du site', () {
+    expect(container.read(livePreviewProvider)?.payload, isNull);
 
-    expect(container.read(livePreviewProvider), isNull);
+    viewModel().updateWebsite((s) => s.copyWith(url: 'site.com'));
+    expect(container.read(livePreviewProvider)?.payload, 'https://site.com');
+
+    viewModel().updateWebsite((s) => s.copyWith(url: 'pas une url'));
+    expect(container.read(livePreviewProvider)?.payload, isNull);
+    expect(container.read(livePreviewProvider)?.message, isNotNull);
+  });
+
+  group('session ouverte en arrière-plan au lancement', () {
+    test('l’enregistrement attend la session', () async {
+      container.dispose();
+      final auth = FakeAuthService()..gate = Completer<void>();
+      container = ProviderContainer(
+        overrides: signedIn(
+          auth: auth,
+          storage: FakeTokenStorage(),
+          qrCodes: service,
+        ),
+      );
+      container.listen(authViewModelProvider, (_, _) {});
+      container
+          .read(qrGeneratorViewModelProvider.notifier)
+          .selectQrType(QrType.website);
+      viewModel().updateWebsite(
+        (s) => s.copyWith(url: 'https://www.awa.design'),
+      );
+
+      final generating = viewModel().generateQr();
+      await Future<void>.delayed(Duration.zero);
+      expect(state().saving.isSaving, isTrue);
+      expect(service.created, isEmpty);
+
+      auth.gate!.complete();
+
+      expect(await generating, isNotNull);
+      expect(service.created, hasLength(1));
+    });
+
+    test('serveur injoignable : le QR Code est tout de même généré', () async {
+      container.dispose();
+      final auth = FakeAuthService()
+        ..anonymousError = const ApiException(ApiErrorKind.offline);
+      container = ProviderContainer(
+        overrides: signedIn(
+          auth: auth,
+          storage: FakeTokenStorage(),
+          qrCodes: service,
+        ),
+      );
+      container.listen(authViewModelProvider, (_, _) {});
+      container
+          .read(qrGeneratorViewModelProvider.notifier)
+          .selectQrType(QrType.website);
+      viewModel().updateWebsite(
+        (s) => s.copyWith(url: 'https://www.awa.design'),
+      );
+
+      final result = await viewModel().generateQr();
+
+      expect(result?.payload, 'https://www.awa.design');
+      expect(state().saving.errorMessage, QrContentViewModel.notSavedMessage);
+      expect(service.created, isEmpty);
+    });
   });
 }

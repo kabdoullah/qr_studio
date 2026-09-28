@@ -47,6 +47,11 @@ class RefreshIn(BaseModel):
     refresh_token: str = Field(min_length=1, max_length=200)
 
 
+class AnonymousIn(BaseModel):
+    # UUID v4 généré par l'application à la première ouverture.
+    installation_id: uuid.UUID
+
+
 class GoogleIn(BaseModel):
     id_token: str = Field(min_length=1, max_length=4096)
 
@@ -60,10 +65,11 @@ class UserOut(BaseModel):
 
     id: uuid.UUID
     email: Optional[str]
-    first_name: str
-    last_name: str
+    first_name: Optional[str]
+    last_name: Optional[str]
     avatar_url: Optional[str]
     email_verified: bool
+    is_anonymous: bool
     is_active: bool
     created_at: datetime
 

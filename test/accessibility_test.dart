@@ -138,6 +138,11 @@ void main() {
       testWidgets('connexion et inscription avec erreurs', (tester) async {
         final handle = tester.ensureSemantics();
         await pumpApp(tester, connected: false);
+        await tester.tap(find.text('Paramètres'));
+        await tester.pumpAndSettle();
+        await expectAccessible(tester);
+        await tester.tap(find.text('Se connecter'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Se connecter'));
         await tester.pumpAndSettle();
         await expectAccessible(tester);
@@ -180,8 +185,8 @@ void main() {
         await tester.tap(find.text('Créer un nouveau QR Code'));
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Mon compte'));
-        await tester.tap(find.text('Mon compte'));
+        await tester.ensureVisible(find.text('Paramètres'));
+        await tester.tap(find.text('Paramètres'));
         await tester.pumpAndSettle();
         await expectAccessible(tester);
         await tester.tap(find.text('Mes QR Codes'));

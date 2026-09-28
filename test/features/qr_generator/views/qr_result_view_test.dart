@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/app/app.dart';
 import 'package:qr_studio/app/router/app_router.dart';
+import 'package:qr_studio/core/network/api_client.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_export_service.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_share_service.dart';
@@ -20,11 +21,17 @@ void main() {
   late ProviderContainer container;
   late FakeQrShareService sharer;
 
-  Future<void> pumpApp(WidgetTester tester) async {
+  Future<void> pumpApp(WidgetTester tester, {bool offline = false}) async {
     sharer = FakeQrShareService();
     container = ProviderContainer(
       overrides: [
-        ...signedIn(),
+        ...offline
+            ? signedIn(
+                auth: FakeAuthService()
+                  ..anonymousError = const ApiException(ApiErrorKind.offline),
+                storage: FakeTokenStorage(),
+              )
+            : signedIn(),
         qrExportServiceProvider.overrideWithValue(FakeQrExportService()),
         qrShareServiceProvider.overrideWithValue(sharer),
       ],
@@ -40,8 +47,12 @@ void main() {
   }
 
   // Parcours complet jusqu'au résultat d'un QR Code texte.
-  Future<void> generateText(WidgetTester tester, String text) async {
-    await pumpApp(tester);
+  Future<void> generateText(
+    WidgetTester tester,
+    String text, {
+    bool offline = false,
+  }) async {
+    await pumpApp(tester, offline: offline);
     await tester.tap(find.text(QrType.text.title));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), text);
@@ -58,6 +69,20 @@ void main() {
     expect(tester.widget<QrPreview>(find.byType(QrPreview)).data, 'Bonjour');
     expect(find.text('Modifier'), findsOneWidget);
     expect(find.text('Créer un nouveau QR Code'), findsOneWidget);
+  });
+
+  testWidgets('sans compte ni serveur : le QR texte est généré, avec un '
+      'simple avertissement', (tester) async {
+    await generateText(tester, 'Hello QR Studio', offline: true);
+
+    expect(find.byType(QrResultView), findsOneWidget);
+    expect(
+      tester.widget<QrPreview>(find.byType(QrPreview)).data,
+      'Hello QR Studio',
+    );
+    expect(find.text(QrContentViewModel.notSavedMessage), findsOneWidget);
+    expect(find.text('Partager'), findsOneWidget);
+    expect(find.text('Télécharger'), findsOneWidget);
   });
 
   testWidgets('une saisie invalide ne mène pas au résultat', (tester) async {

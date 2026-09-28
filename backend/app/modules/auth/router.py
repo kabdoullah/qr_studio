@@ -1,13 +1,18 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import Settings
 from ...core.database import get_session
-from ...core.dependencies import get_current_active_user, get_settings
+from ...core.dependencies import (
+    get_current_active_user,
+    get_optional_user,
+    get_settings,
+)
 from .models import User
 from .schemas import (
+    AnonymousIn,
     AuthOut,
     FacebookIn,
     GoogleIn,
@@ -41,13 +46,25 @@ def _providers(request: Request) -> Dict[str, SocialAuthProvider]:
     return request.app.state.social_providers
 
 
+@router.post("/anonymous", response_model=AuthOut)
+async def anonymous(
+    data: AnonymousIn,
+    client: ClientInfo = Depends(_client),
+    service: AuthService = Depends(_service),
+) -> AuthOut:
+    return await service.anonymous(data.installation_id, client)
+
+
+# Avec la session d'un utilisateur anonyme, l'inscription et la connexion
+# Google/Facebook convertissent ce compte (même `id`).
 @router.post("/register", status_code=201, response_model=AuthOut)
 async def register(
     data: RegisterIn,
     client: ClientInfo = Depends(_client),
+    current: Optional[User] = Depends(get_optional_user),
     service: AuthService = Depends(_service),
 ) -> AuthOut:
-    return await service.register(data, client)
+    return await service.register(data, client, current)
 
 
 @router.post("/login", response_model=AuthOut)
@@ -63,20 +80,26 @@ async def login(
 async def google(
     data: GoogleIn,
     client: ClientInfo = Depends(_client),
+    current: Optional[User] = Depends(get_optional_user),
     providers: Dict[str, SocialAuthProvider] = Depends(_providers),
     service: AuthService = Depends(_service),
 ) -> AuthOut:
-    return await service.social_login(providers["google"], data.id_token, client)
+    return await service.social_login(
+        providers["google"], data.id_token, client, current
+    )
 
 
 @router.post("/social/facebook", response_model=AuthOut)
 async def facebook(
     data: FacebookIn,
     client: ClientInfo = Depends(_client),
+    current: Optional[User] = Depends(get_optional_user),
     providers: Dict[str, SocialAuthProvider] = Depends(_providers),
     service: AuthService = Depends(_service),
 ) -> AuthOut:
-    return await service.social_login(providers["facebook"], data.access_token, client)
+    return await service.social_login(
+        providers["facebook"], data.access_token, client, current
+    )
 
 
 @router.post("/social/google/link", response_model=UserOut)

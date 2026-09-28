@@ -12,6 +12,7 @@ from ...config import Settings
 from ...core.database import utc_now
 from ...core.security import (
     create_access_token,
+    hash_installation_id,
     hash_password,
     hash_refresh_token,
     new_refresh_token,
@@ -31,6 +32,10 @@ _LINK_REQUIRED = (
 _IDENTITY_TAKEN = "Ce compte {provider} est déjà lié à un autre compte QR Studio."
 _INVALID_REFRESH = "Session expirée ou invalide. Veuillez vous reconnecter."
 _DISABLED = "Ce compte est désactivé."
+_RETRY = "Une erreur est survenue. Veuillez réessayer."
+_ANONYMOUS_LINK = (
+    "Créez d'abord votre compte : choisissez « Continuer avec {provider} »."
+)
 _PROVIDER_NAMES = {"google": "Google", "facebook": "Facebook"}
 
 
@@ -50,20 +55,57 @@ class AuthService:
         self._identities = IdentityRepository(session)
         self._tokens = RefreshTokenRepository(session)
 
+    # --- Utilisateur anonyme ---
+
+    async def anonymous(self, installation_id: uuid.UUID, client: ClientInfo) -> AuthOut:
+        """Session de l'utilisateur anonyme de cette installation, créé au
+        premier appel. Idempotent : la même installation retrouve toujours
+        le même compte, tant qu'il n'a pas été converti.
+
+        L'identifiant d'installation sert uniquement à ouvrir la session ;
+        les requêtes sont ensuite authentifiées par les jetons, comme pour
+        un compte enregistré.
+        """
+        installation_hash = hash_installation_id(installation_id)
+        user = await self._users.get_by_installation(installation_hash)
+        if user is None:
+            try:
+                user = await self._users.add(
+                    User(is_anonymous=True, installation_hash=installation_hash)
+                )
+            except IntegrityError:
+                # Premier lancement envoyé deux fois en même temps : le
+                # compte créé par l'autre requête est réutilisé.
+                await self._session.rollback()
+                user = await self._users.get_by_installation(installation_hash)
+                if user is None:
+                    raise HTTPException(409, _RETRY) from None
+        if not user.is_active:
+            raise HTTPException(403, _DISABLED)
+        return await self._open_session(user, client)
+
     # --- Email et mot de passe ---
 
-    async def register(self, data: RegisterIn, client: ClientInfo) -> AuthOut:
+    async def register(
+        self, data: RegisterIn, client: ClientInfo, current: Optional[User] = None
+    ) -> AuthOut:
+        """Crée un compte, ou convertit l'utilisateur anonyme de la session
+        (`current`) : même `id`, ses QR Codes et fichiers restent à lui."""
         if await self._users.get_by_email(data.email) is not None:
             raise HTTPException(409, _EMAIL_TAKEN)
-        user = User(
-            email=data.email,
-            # Argon2 est volontairement lent : hors de la boucle async.
-            password_hash=await run_in_threadpool(hash_password, data.password),
-            first_name=data.first_name,
-            last_name=data.last_name,
-        )
+        # Argon2 est volontairement lent : hors de la boucle async.
+        password_hash = await run_in_threadpool(hash_password, data.password)
+        anonymous = _anonymous(current)
+        user = anonymous or User()
+        user.email = data.email
+        user.password_hash = password_hash
+        user.first_name = data.first_name
+        user.last_name = data.last_name
         try:
-            await self._users.add(user)
+            if anonymous is None:
+                await self._users.add(user)
+            else:
+                await self._claim(user)
             auth = await self._open_session(user, client)
         except IntegrityError:
             # Inscription simultanée avec le même email.
@@ -87,8 +129,20 @@ class AuthService:
     # --- Google, Facebook ---
 
     async def social_login(
-        self, provider: SocialAuthProvider, credential: str, client: ClientInfo
+        self,
+        provider: SocialAuthProvider,
+        credential: str,
+        client: ClientInfo,
+        current: Optional[User] = None,
     ) -> AuthOut:
+        """Connexion Google/Facebook.
+
+        Compte externe déjà connu (ou email vérifié d'un compte existant) :
+        connexion à ce compte, sans fusion avec l'utilisateur anonyme de la
+        session, dont les QR Codes restent attachés à l'installation.
+        Sinon, l'utilisateur anonyme (`current`) devient ce compte (même
+        `id`) ; sans session anonyme, un compte est créé.
+        """
         social = await self._verify(provider, credential)
         identity = await self._identities.get(social.provider, social.provider_user_id)
         if identity is not None:
@@ -110,15 +164,17 @@ class AuthService:
             if not user.is_active:
                 raise HTTPException(403, _DISABLED)
         else:
-            user = await self._users.add(
-                User(
-                    email=social.email,
-                    first_name=social.first_name,
-                    last_name=social.last_name,
-                    avatar_url=social.avatar_url,
-                    email_verified=social.email is not None and social.email_verified,
-                )
-            )
+            anonymous = _anonymous(current)
+            user = anonymous or User()
+            user.email = social.email
+            user.first_name = social.first_name
+            user.last_name = social.last_name
+            user.avatar_url = social.avatar_url
+            user.email_verified = social.email is not None and social.email_verified
+            if anonymous is None:
+                await self._users.add(user)
+            else:
+                await self._claim(user)
         try:
             await self._add_identity(user, social)
             return await self._open_session(user, client)
@@ -132,6 +188,11 @@ class AuthService:
         self, user: User, provider: SocialAuthProvider, credential: str
     ) -> UserOut:
         """Rattache un compte Google/Facebook au compte connecté."""
+        if user.is_anonymous:
+            # La conversion passe par `social_login`, qui complète le profil.
+            raise HTTPException(
+                400, _ANONYMOUS_LINK.format(provider=_PROVIDER_NAMES[provider.name])
+            )
         social = await self._verify(provider, credential)
         identity = await self._identities.get(social.provider, social.provider_user_id)
         if identity is not None and identity.user_id != user.id:
@@ -158,9 +219,22 @@ class AuthService:
                 503, f"La connexion avec {name} est indisponible pour le moment."
             ) from None
         except SocialAuthError:
+            # 400 et non 401 : la requête peut porter la session d'un
+            # utilisateur anonyme, et un 401 signifierait que cette session
+            # est invalide (l'application la terminerait).
             raise HTTPException(
-                401, f"La connexion avec {name} a échoué. Veuillez réessayer."
+                400, f"La connexion avec {name} a échoué. Veuillez réessayer."
             ) from None
+
+    async def _claim(self, user: User) -> None:
+        """Convertit l'utilisateur anonyme en compte enregistré (même `id`).
+
+        L'installation ne donne plus accès au compte, et ses sessions
+        anonymes sont terminées : la conversion en ouvre une nouvelle.
+        """
+        user.is_anonymous = False
+        user.installation_hash = None
+        await self._tokens.revoke_all(user.id, utc_now())
 
     async def _add_identity(self, user: User, social: SocialUser) -> None:
         await self._identities.add(
@@ -245,3 +319,13 @@ class AuthService:
             ip_address=(client.ip_address or None) and client.ip_address[:45],
         )
         return token, row
+
+
+def _anonymous(current: Optional[User]) -> Optional[User]:
+    """Utilisateur anonyme de la session à convertir, sinon `None` (sans
+    session, ou session d'un compte déjà enregistré)."""
+    if current is None or not current.is_anonymous:
+        return None
+    if not current.is_active:
+        raise HTTPException(403, _DISABLED)
+    return current

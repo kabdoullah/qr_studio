@@ -1,9 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_dimens.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/error_message.dart';
 import '../../../core/widgets/visibility_toggle.dart';
+import '../viewmodels/auth_view_model.dart';
+
+// À appeler dans `build` des écrans de connexion et d'inscription : une fois
+// le compte ouvert, retour à l'accueil. Ces écrans sont empilés sur
+// l'application, et le routeur ne réévalue pas un écran empilé.
+void goHomeOnSession(WidgetRef ref, BuildContext context) {
+  ref.listen(authViewModelProvider.select((s) => s.status), (_, status) {
+    if (status == AuthStatus.authenticated) context.go(AppRoutes.home);
+  });
+}
 
 // Mise en page commune à la connexion et à l'inscription : logo, titre,
 // formulaire centré et message d'erreur éventuel. Sur grand écran, le

@@ -12,6 +12,7 @@ import 'package:qr_studio/features/qr_generator/services/qr_export_service.dart'
 import 'package:qr_studio/features/qr_generator/services/qr_share_service.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:qr_studio/core/network/api_client.dart';
+import 'package:qr_studio/core/storage/installation_storage.dart';
 import 'package:qr_studio/core/storage/token_storage.dart';
 import 'package:qr_studio/features/auth/models/app_user.dart';
 import 'package:qr_studio/core/network/session_token.dart';
@@ -194,6 +195,37 @@ class FakeTokenStorage implements TokenStorage {
   Future<void> delete() async => tokens = null;
 }
 
+// Identifiant d'installation simulé (en mémoire), créé au premier appel.
+class FakeInstallationStorage implements InstallationStorage {
+  FakeInstallationStorage([this.id]);
+
+  String? id;
+  Object? error;
+  int created = 0;
+
+  @override
+  Future<String?> getInstallationId() async => id;
+
+  @override
+  Future<String> getOrCreateInstallationId() async {
+    if (error case final e?) throw e;
+    if (id case final existing?) return existing;
+    created++;
+    return id = 'installation-$created';
+  }
+
+  @override
+  Future<void> clearInstallationId() async => id = null;
+}
+
+const anonymousUser = AppUser(
+  id: 'user-anonyme',
+  email: null,
+  firstName: null,
+  lastName: null,
+  isAnonymous: true,
+);
+
 const awaUser = AppUser(
   id: 'user-awa',
   email: 'awa@example.com',
@@ -213,7 +245,9 @@ class FakeAuthService implements AuthService {
   Object? registerError;
   Object? refreshError;
   Object? socialError;
+  Object? anonymousError;
   Completer<void>? gate;
+  final List<String> anonymousInstallations = [];
   final List<String> registered = [];
   final List<String> refreshed = [];
   final List<String> loggedOut = [];
@@ -232,6 +266,37 @@ class FakeAuthService implements AuthService {
 
   AuthSession _session() => AuthSession(user: user, tokens: _nextTokens());
 
+  // Session anonyme : comme le serveur, la même installation retrouve le
+  // même utilisateur.
+  @override
+  Future<AuthSession> anonymous(String installationId) async {
+    anonymousInstallations.add(installationId);
+    await gate?.future;
+    if (anonymousError case final e?) throw e;
+    user = AppUser(
+      id: 'anonyme-$installationId',
+      email: null,
+      firstName: null,
+      lastName: null,
+      isAnonymous: true,
+    );
+    return _session();
+  }
+
+  // Compte Google/Facebook : l'utilisateur anonyme en cours est converti
+  // (même `id`), sinon le compte d'Awa est ouvert.
+  AuthSession _socialSession() {
+    user = user.isAnonymous
+        ? AppUser(
+            id: user.id,
+            email: awaUser.email,
+            firstName: awaUser.firstName,
+            lastName: awaUser.lastName,
+          )
+        : awaUser;
+    return _session();
+  }
+
   @override
   Future<AuthSession> register({
     required String firstName,
@@ -242,8 +307,9 @@ class FakeAuthService implements AuthService {
     await gate?.future;
     if (registerError case final e?) throw e;
     registered.add(email);
+    // Utilisateur anonyme : converti, avec le même `id`.
     user = AppUser(
-      id: 'user-new',
+      id: user.isAnonymous ? user.id : 'user-new',
       email: email,
       firstName: firstName,
       lastName: lastName,
@@ -265,6 +331,8 @@ class FakeAuthService implements AuthService {
         serverMessage: 'Email ou mot de passe incorrect.',
       );
     }
+    // Connexion à un autre compte : l'utilisateur anonyme n'est pas repris.
+    if (user.isAnonymous) user = awaUser;
     return _session();
   }
 
@@ -273,7 +341,7 @@ class FakeAuthService implements AuthService {
     googleTokens.add(idToken);
     await gate?.future;
     if (socialError case final e?) throw e;
-    return _session();
+    return _socialSession();
   }
 
   @override
@@ -281,7 +349,7 @@ class FakeAuthService implements AuthService {
     facebookTokens.add(accessToken);
     await gate?.future;
     if (socialError case final e?) throw e;
-    return _session();
+    return _socialSession();
   }
 
   @override
@@ -458,7 +526,11 @@ List<Override> signedIn({
   FakeGoogleAuthService? google,
   FakeFacebookAuthService? facebook,
   FakeQrHistoryCache? historyCache,
+  FakeInstallationStorage? installation,
 }) => [
+  installationStorageProvider.overrideWithValue(
+    installation ?? FakeInstallationStorage(),
+  ),
   qrHistoryCacheProvider.overrideWithValue(
     historyCache ?? FakeQrHistoryCache(),
   ),

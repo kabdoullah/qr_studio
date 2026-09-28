@@ -33,8 +33,8 @@ class WebsiteForm extends ConsumerWidget {
           const SectionHeader(
             'Votre site',
             description:
-                'Partagez votre site avec un QR Code. Vous pourrez changer '
-                "l'adresse plus tard sans le réimprimer.",
+                'Partagez votre site avec un QR Code : il ouvre directement '
+                'votre site.',
           ),
           TextFormField(
             autovalidateMode: AutovalidateMode.onUserInteraction,

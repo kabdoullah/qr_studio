@@ -62,24 +62,46 @@ class QrHistoryViewModel extends _$QrHistoryViewModel {
   int _version = 0;
   Future<void>? _revalidation;
   String? _userId;
+  // Liste déjà demandée : après l'ouverture de la session ou un changement
+  // de compte, elle est rechargée d'elle-même.
+  bool _requested = false;
 
   @override
   QrHistoryState build() {
     _userId = ref.watch(authViewModelProvider.select((s) => s.user?.id));
     _version++;
     _revalidation = null;
+    if (_requested && _userId != null) Future.microtask(revalidate);
     return const QrHistoryState();
   }
 
   // Recharge la liste depuis le serveur, sans masquer celle déjà connue.
   // Les appels simultanés partagent le même chargement.
-  Future<void> revalidate() =>
-      _revalidation ??= _revalidate().whenComplete(() => _revalidation = null);
+  Future<void> revalidate() {
+    _requested = true;
+    return _revalidation ??= _revalidate().whenComplete(
+      () => _revalidation = null,
+    );
+  }
 
   Future<void> _revalidate() async {
     final service = ref.read(qrCodeServiceProvider);
     if (service == null) {
       state = state.copyWith(errorMessage: () => unavailableMessage);
+      return;
+    }
+    // Session encore en cours d'ouverture (lancement) : l'attendre. Une fois
+    // ouverte, le changement d'utilisateur relance le chargement (`build`).
+    final auth = ref.read(authViewModelProvider.notifier);
+    if (ref.read(authViewModelProvider).user == null) {
+      state = state.copyWith(isRevalidating: true, errorMessage: () => null);
+      if (!await auth.ensureSession() && ref.mounted) {
+        state = state.copyWith(
+          isRevalidating: false,
+          errorMessage: () =>
+              ref.read(authViewModelProvider).notice ?? loadFailedMessage,
+        );
+      }
       return;
     }
     final version = _version;

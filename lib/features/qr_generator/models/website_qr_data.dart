@@ -1,5 +1,5 @@
-// Site web : le QR Code mène à l'adresse publique QR Studio, qui ouvre
-// ce site (modifiable sans réimprimer le QR Code).
+// Site web : le QR Code contient directement l'adresse du site (aucune
+// page intermédiaire).
 class WebsiteQrData {
   const WebsiteQrData({this.title = '', this.url = ''});
 

@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/models/wifi_qr_data.dart';
-import 'package:qr_studio/features/qr_generator/services/qr_code_service.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_state.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_content_view_model.dart';
 import 'package:qr_studio/features/qr_generator/viewmodels/qr_generator_view_model.dart';
@@ -21,9 +20,7 @@ void main() {
 
   setUp(() {
     service = FakeQrCodeService();
-    container = ProviderContainer(
-      overrides: [qrCodeServiceProvider.overrideWithValue(service)],
-    );
+    container = ProviderContainer(overrides: signedIn(qrCodes: service));
     container
         .read(qrGeneratorViewModelProvider.notifier)
         .selectQrType(QrType.wifi);

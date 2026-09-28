@@ -3,6 +3,7 @@ import 'package:qr_studio/features/qr_generator/models/business_card_data.dart';
 import 'package:qr_studio/features/qr_generator/models/qr_type.dart';
 import 'package:qr_studio/features/qr_generator/models/saved_qr_code.dart';
 import 'package:qr_studio/features/qr_generator/models/text_qr_data.dart';
+import 'package:qr_studio/features/qr_generator/models/website_qr_data.dart';
 import 'package:qr_studio/features/qr_generator/models/wifi_qr_data.dart';
 import 'package:qr_studio/features/qr_generator/services/qr_service.dart';
 
@@ -231,13 +232,18 @@ void main() {
     });
   });
 
-  group('réseaux sociaux et site web', () {
+  test("réseaux sociaux : l'adresse publique QR Studio", () {
     const publicUrl = 'https://qrstudio.app/q/x8K2pLm91abc';
+    expect(service.generateSocialMediaPayload(' $publicUrl '), publicUrl);
+  });
 
-    test("encodent l'adresse publique QR Studio", () {
-      expect(service.generateSocialMediaPayload(publicUrl), publicUrl);
-      expect(service.generateWebsitePayload(' $publicUrl '), publicUrl);
-    });
+  test("site web : l'adresse du site elle-même", () {
+    expect(
+      service.generateWebsitePayload(
+        const WebsiteQrData(url: ' mon-site.com '),
+      ),
+      'https://mon-site.com',
+    );
   });
 
   group('generateSavedPayload', () {
@@ -276,9 +282,17 @@ void main() {
       );
     });
 
+    test('site web : adresse du site', () {
+      expect(
+        service.generateSavedPayload(
+          saved(QrType.website, {'url': 'https://example.com'}),
+        ),
+        'https://example.com',
+      );
+    });
+
     test('types dynamiques et fichiers : adresse publique', () {
       for (final (type, content) in [
-        (QrType.website, <String, Object?>{'url': 'https://example.com'}),
         (QrType.socialMedia, <String, Object?>{'links': []}),
         (QrType.cv, <String, Object?>{'file_id': 'f'}),
         (QrType.businessCard, <String, Object?>{'mode': 'image'}),
