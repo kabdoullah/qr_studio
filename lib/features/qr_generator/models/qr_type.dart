@@ -50,7 +50,6 @@ enum QrType {
     accent: AppColors.sky,
     readyMessage: 'Votre QR Code est prêt',
     fileName: 'qr-code-site-web.png',
-    isDynamic: true,
   ),
   wifi(
     apiName: 'wifi',

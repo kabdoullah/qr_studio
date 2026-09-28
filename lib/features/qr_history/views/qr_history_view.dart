@@ -11,6 +11,7 @@ import '../../qr_generator/models/saved_qr_code.dart';
 import '../../qr_generator/viewmodels/qr_content_view_model.dart';
 import '../../qr_generator/viewmodels/qr_result_view_model.dart';
 import '../viewmodels/qr_history_view_model.dart';
+import '../../auth/widgets/account_prompt.dart';
 
 // « Mes QR Codes » : ouvrir, modifier, partager ou supprimer. La dernière
 // liste connue s'affiche aussitôt ; elle est actualisée à chaque ouverture.
@@ -186,6 +187,7 @@ class _QrCodeList extends StatelessWidget {
               if (index > 0) const SizedBox(height: AppSpacing.sm),
               _QrCodeTile(key: ValueKey(qr.id), qr: qr),
             ],
+            const AccountPrompt(),
           ],
         );
       },

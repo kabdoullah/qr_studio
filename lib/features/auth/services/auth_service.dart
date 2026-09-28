@@ -7,14 +7,27 @@ import '../models/auth_session.dart';
 
 part 'auth_service.g.dart';
 
-// Comptes et sessions (`/api/v1/auth/…`). Inscription, connexion
-// (email, Google, Facebook) renvoient `{ user, access_token, refresh_token }`.
-// Les credentials Google/Facebook sont vérifiés par le serveur, qui en tire
-// lui-même l'identité.
+// Comptes et sessions (`/api/v1/auth/…`). Session anonyme, inscription,
+// connexion (email, Google, Facebook) renvoient
+// `{ user, access_token, refresh_token }`. Les credentials Google/Facebook
+// sont vérifiés par le serveur, qui en tire lui-même l'identité.
+//
+// L'inscription et Google/Facebook partent avec la session en cours : celle
+// d'un utilisateur anonyme est alors convertie en compte (même `id`, mêmes
+// QR Codes). La connexion par email part sans session : elle ouvre un
+// autre compte, et un mauvais mot de passe (401) ne termine pas la session.
 class AuthService {
   const AuthService(this._api);
 
   final ApiClient _api;
+
+  // Session de l'utilisateur anonyme de cette installation (créé au premier
+  // appel, retrouvé ensuite).
+  Future<AuthSession> anonymous(String installationId) async => _session(
+    await _api.post('api/v1/auth/anonymous', {
+      'installation_id': installationId,
+    }, authenticated: false),
+  );
 
   Future<AuthSession> register({
     required String firstName,
@@ -27,7 +40,7 @@ class AuthService {
       'last_name': lastName.trim(),
       'email': email.trim(),
       'password': password,
-    }, authenticated: false),
+    }),
   );
 
   Future<AuthSession> login({
@@ -41,15 +54,13 @@ class AuthService {
   );
 
   Future<AuthSession> loginWithGoogle(String idToken) async => _session(
-    await _api.post('api/v1/auth/social/google', {
-      'id_token': idToken,
-    }, authenticated: false),
+    await _api.post('api/v1/auth/social/google', {'id_token': idToken}),
   );
 
   Future<AuthSession> loginWithFacebook(String accessToken) async => _session(
     await _api.post('api/v1/auth/social/facebook', {
       'access_token': accessToken,
-    }, authenticated: false),
+    }),
   );
 
   // Nouvelle paire de jetons ; l'ancien jeton de renouvellement est révoqué.

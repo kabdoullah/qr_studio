@@ -169,7 +169,7 @@ def test_existing_google_identity_finds_the_same_account(client):
 def test_invalid_google_tokens_are_refused(client, token):
     response = google(client, token)
 
-    assert response.status_code == 401
+    assert response.status_code == 400
     assert response.json()["detail"] == "La connexion avec Google a échoué. Veuillez réessayer."
 
 
@@ -278,7 +278,7 @@ def test_existing_facebook_identity_finds_the_same_account(client, graph):
 def test_invalid_facebook_token_is_refused(client, graph):
     response = facebook(client, "inconnu")
 
-    assert response.status_code == 401
+    assert response.status_code == 400
     assert response.json()["detail"] == (
         "La connexion avec Facebook a échoué. Veuillez réessayer."
     )
@@ -287,7 +287,7 @@ def test_invalid_facebook_token_is_refused(client, graph):
 def test_facebook_token_of_another_app_is_refused(client, graph):
     graph.add("fb-token", app_id="autre-app")
 
-    assert facebook(client).status_code == 401
+    assert facebook(client).status_code == 400
 
 
 def test_expired_facebook_token_is_refused(client, graph):
@@ -295,7 +295,7 @@ def test_expired_facebook_token_is_refused(client, graph):
     graph.add("fb-token")
     graph.users.pop("fb-token")
 
-    assert facebook(client).status_code == 401
+    assert facebook(client).status_code == 400
 
 
 def test_facebook_email_of_an_existing_account_is_not_merged(client, graph):

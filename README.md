@@ -9,11 +9,12 @@ FastAPI est dans [`backend/`](backend/README.md).
 - **Six types de QR Code** : carte de visite (vCard ou image de la carte),
   CV en PDF, texte libre, réseaux sociaux (page publique listant plusieurs
   liens), site web et Wi-Fi.
-- **QR Codes dynamiques** (CV, réseaux sociaux, site web, carte en image) :
+- **QR Codes dynamiques** (CV, réseaux sociaux, carte en image) :
   le QR Code encode `https://…/q/{slug}`. Le contenu reste modifiable sans
   réimprimer le QR Code, car le slug ne change jamais.
-- **QR Codes statiques** (texte, Wi-Fi, carte en coordonnées) : le contenu
-  est encodé directement, lisible hors ligne par le téléphone qui scanne.
+- **QR Codes statiques** (texte, Wi-Fi, carte en coordonnées, site web) : le
+  contenu est encodé directement, lisible hors ligne par le téléphone qui
+  scanne ; un QR Code de site web ouvre le site sans page intermédiaire.
   Ils sont tout de même enregistrés sur le compte.
 - **Comptes** : email et mot de passe, ou Google. Facebook est codé mais
   pas encore configuré. La session reste ouverte entre deux lancements

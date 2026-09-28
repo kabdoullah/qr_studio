@@ -24,7 +24,10 @@ void main() {
 
   ProviderContainer createContainer(QrCodeService? qrCodes) {
     final c = ProviderContainer(
-      overrides: [qrCodeServiceProvider.overrideWithValue(qrCodes)],
+      // Sans serveur : pas de session ; sinon, session ouverte.
+      overrides: qrCodes is FakeQrCodeService
+          ? signedIn(qrCodes: qrCodes)
+          : [qrCodeServiceProvider.overrideWithValue(qrCodes)],
     );
     c
         .read(qrGeneratorViewModelProvider.notifier)

@@ -51,6 +51,19 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Optional[User]:
+    """Compte de la session si la requête en présente une (conversion d'un
+    compte anonyme), sinon `None`. Un jeton invalide reste refusé (401) :
+    l'application le renouvelle puis rejoue la requête."""
+    if credentials is None:
+        return None
+    return await get_current_user(credentials, session, settings)
+
+
 async def get_current_active_user(user: User = Depends(get_current_user)) -> User:
     if not user.is_active:
         raise HTTPException(403, "Ce compte est désactivé.")

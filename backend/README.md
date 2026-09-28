@@ -15,7 +15,8 @@ sont aussi enregistrés sur le compte.
 
 | Méthode | Chemin                         | Rôle                                              |
 |---------|--------------------------------|---------------------------------------------------|
-| POST    | `/api/v1/auth/register`        | Création de compte (`email`, `password` ≥ 8, `first_name`, `last_name`) → `201` + session |
+| POST    | `/api/v1/auth/anonymous`       | `{"installation_id"}` (UUID) → session de l'utilisateur anonyme de cette installation (`200`) |
+| POST    | `/api/v1/auth/register`        | Création de compte (`email`, `password` ≥ 8, `first_name`, `last_name`) → `201` + session ; avec la session d'un anonyme : conversion |
 | POST    | `/api/v1/auth/login`           | Session : `{"user", "access_token", "refresh_token", "token_type": "bearer"}` |
 | POST    | `/api/v1/auth/social/google`   | `{"id_token"}` (ID token Google) → session        |
 | POST    | `/api/v1/auth/social/facebook` | `{"access_token"}` (jeton Facebook) → session     |
@@ -23,13 +24,33 @@ sont aussi enregistrés sur le compte.
 | POST    | `/api/v1/auth/refresh`         | `{"refresh_token"}` → nouveaux `access_token` et `refresh_token` |
 | POST    | `/api/v1/auth/logout`          | `{"refresh_token"}` : termine cette session → `204` |
 | POST    | `/api/v1/auth/logout-all`      | Termine toutes les sessions du compte (jeton d'accès requis) → `204` |
-| GET     | `/api/v1/auth/me`              | `{id, email, first_name, last_name, avatar_url, email_verified, …}` |
+| GET     | `/api/v1/auth/me`              | `{id, email, first_name, last_name, avatar_url, email_verified, is_anonymous, …}` |
 | GET     | `/api/v1/qr-codes`             | QR Codes du compte, plus récents d'abord          |
 | POST    | `/api/v1/qr-codes`             | Création : `{"type", "title", "content"}`         |
 | GET/PUT/DELETE | `/api/v1/qr-codes/{id}` | Lecture, modification (même slug), suppression   |
 | GET     | `/api/v1/public/q/{slug}`      | Contenu public, sans compte (JSON)                |
 | GET     | `/q/{slug}`                    | Page publique ouverte au scan (HTML, sans JavaScript) |
 
+- **Utilisateurs anonymes (anonymous-first)** : l'application n'exige pas
+  de compte. Au premier lancement, elle génère un identifiant
+  d'installation (UUID v4, stockage sécurisé) et appelle `auth/anonymous`,
+  qui crée un utilisateur `is_anonymous` (sans email, mot de passe ni nom)
+  ou retrouve celui de l'installation (idempotent). Seule l'empreinte
+  SHA-256 de l'identifiant est conservée (`users.installation_hash`,
+  unique). L'identifiant n'est jamais un jeton : il ouvre une session
+  ordinaire (mêmes jetons, même rotation), et toutes les requêtes sont
+  authentifiées par le jeton d'accès. Limité à 20 appels par heure et par
+  adresse IP, 1000 au total (`429`).
+- **Conversion** : `register` et `social/*` acceptent un
+  `Authorization: Bearer` facultatif (jeton invalide : `401`, l'application
+  renouvelle puis rejoue). Avec la session d'un anonyme, c'est ce même
+  utilisateur qui devient le compte (même `id` : QR Codes et fichiers
+  conservés) ; ses sessions anonymes sont terminées et l'installation ne
+  donne plus accès au compte (après une déconnexion, elle reçoit un nouvel
+  anonyme). Compte Google/Facebook déjà connu (ou email vérifié d'un compte
+  existant) : connexion à ce compte, **sans fusion** ; l'anonyme garde ses
+  QR Codes et reste celui de l'installation. `…/link` refuse un anonyme
+  (`400`).
 - **Sessions** : jeton d'accès JWT court (`Authorization: Bearer …`, 15
   min) et jeton de renouvellement opaque (30 jours), conservé en base
   uniquement sous forme d'empreinte SHA-256 (`refresh_tokens`). Chaque
@@ -45,7 +66,8 @@ sont aussi enregistrés sur le compte.
   le secret de l'application, puis `/me` avec `appsecret_proof`) et n'utilise
   que l'identité qui en ressort (`auth_identities`, unique par fournisseur et
   identifiant). Un compte Facebook peut ne pas avoir d'email (`email: null`).
-  Fournisseur non configuré ou injoignable : `503` ; credential refusé : `401`.
+  Fournisseur non configuré ou injoignable : `503` ; credential refusé : `400`
+  (pas `401`, réservé à la session présentée).
 - **Liaison de comptes** : si l'email d'une connexion Google/Facebook
   appartient déjà à un compte, les comptes ne sont fusionnés que si
   l'adresse est vérifiée des deux côtés (Google `email_verified`, et compte
@@ -59,6 +81,12 @@ sont aussi enregistrés sur le compte.
   ses jetons aléatoires ne se devinent pas.
 - **Suppression de compte (à venir)** : identités et jetons sont supprimés
   en cascade avec l'utilisateur, comme ses QR Codes.
+- **Nettoyage des anonymes (à venir)** : les anonymes inactifs pourront
+  être supprimés après un délai (`ANONYMOUS_USER_RETENTION_DAYS`), par
+  exemple ceux sans jeton de renouvellement émis depuis ce délai
+  (`refresh_tokens.created_at`, renouvelé à chaque ouverture). Leurs
+  fichiers (`files.owner_id`, sans clé étrangère) devront être supprimés
+  par `FileStore.delete`, leurs QR Codes le sont en cascade.
 - **Propriété** : un QR Code n'est visible, modifiable et supprimable que
   par son compte ; celui d'un autre compte renvoie `404`.
 - **Types et `content`** : `text` (`text`, 1000 caractères), `website`

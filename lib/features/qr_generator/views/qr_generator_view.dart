@@ -19,9 +19,6 @@ class QrGeneratorView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final firstName = ref.watch(
-      authViewModelProvider.select((s) => s.user?.firstName.trim()),
-    );
 
     void onTypeSelected(QrType type) {
       ref.read(qrGeneratorViewModelProvider.notifier).selectQrType(type);
@@ -49,18 +46,9 @@ class QrGeneratorView extends ConsumerWidget {
                     alignment: WrapAlignment.spaceBetween,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     runSpacing: AppSpacing.xs,
-                    children: [BrandMark(), _AccountMenu()],
+                    children: [BrandMark(), _SettingsMenu()],
                   ),
                   const SizedBox(height: AppSpacing.xxl),
-                  if (firstName != null && firstName.isNotEmpty) ...[
-                    Text(
-                      'Bonjour, $firstName',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: colors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                  ],
                   Semantics(
                     header: true,
                     child: Text(
@@ -158,19 +146,26 @@ class _TypeGrid extends StatelessWidget {
   }
 }
 
-// Menu du compte : identité, « Mes QR Codes » et déconnexion.
-class _AccountMenu extends ConsumerWidget {
-  const _AccountMenu();
+// Paramètres : identité, « Mes QR Codes », puis création de compte et
+// connexion (facultatives) sans compte, déconnexion pour un compte
+// enregistré.
+class _SettingsMenu extends ConsumerWidget {
+  const _SettingsMenu();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authViewModelProvider.select((s) => s.user));
+    final registered = ref.watch(
+      authViewModelProvider.select((s) => s.isAuthenticated),
+    );
     return PopupMenuButton<_AccountAction>(
-      tooltip: 'Mon compte',
+      tooltip: 'Paramètres',
       position: PopupMenuPosition.under,
       constraints: const BoxConstraints(minWidth: 240, maxWidth: 320),
       onSelected: (action) => switch (action) {
         _AccountAction.history => context.push(AppRoutes.history),
+        _AccountAction.register => context.push(AppRoutes.register),
+        _AccountAction.login => context.push(AppRoutes.login),
         _AccountAction.logout =>
           ref.read(authViewModelProvider.notifier).logout(),
       },
@@ -186,34 +181,50 @@ class _AccountMenu extends ConsumerWidget {
             title: Text('Mes QR Codes'),
           ),
         ),
-        const PopupMenuItem(
-          value: _AccountAction.logout,
-          child: ListTile(
-            leading: Icon(Icons.logout_rounded),
-            title: Text('Se déconnecter'),
+        if (!registered) ...const [
+          PopupMenuItem(
+            value: _AccountAction.register,
+            child: ListTile(
+              leading: Icon(Icons.person_add_alt_rounded),
+              title: Text('Créer un compte'),
+            ),
           ),
-        ),
+          PopupMenuItem(
+            value: _AccountAction.login,
+            child: ListTile(
+              leading: Icon(Icons.login_rounded),
+              title: Text('Se connecter'),
+            ),
+          ),
+        ] else
+          const PopupMenuItem(
+            value: _AccountAction.logout,
+            child: ListTile(
+              leading: Icon(Icons.logout_rounded),
+              title: Text('Se déconnecter'),
+            ),
+          ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xxs,
-          vertical: AppSpacing.xxs,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _Avatar(user: user),
-            const SizedBox(width: AppSpacing.xs),
-            const Flexible(child: Text('Mon compte')),
-            const Icon(Icons.expand_more_rounded, size: 20),
-          ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: AppLayout.minTapTarget),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.settings_outlined),
+              SizedBox(width: AppSpacing.xs),
+              Flexible(child: Text('Paramètres')),
+              Icon(Icons.expand_more_rounded, size: 20),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-enum _AccountAction { history, logout }
+enum _AccountAction { history, register, login, logout }
 
 // Initiales de l'utilisateur dans une pastille.
 class _Avatar extends StatelessWidget {
@@ -247,14 +258,15 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-// En-tête du menu : nom et adresse du compte connecté (non cliquable).
+// En-tête du menu : nom et adresse du compte, ou « Compte anonyme » (non
+// cliquable). Aucune adresse n'est inventée pour un utilisateur anonyme.
 class _ProfileHeader extends PopupMenuEntry<_AccountAction> {
   const _ProfileHeader({required this.user});
 
   final AppUser user;
 
   @override
-  double get height => 72;
+  double get height => 88;
 
   @override
   bool represents(_AccountAction? value) => false;
@@ -268,7 +280,14 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = widget.user;
-    final name = '${user.firstName} ${user.lastName}'.trim();
+    final name = user.isAnonymous
+        ? 'Utilisateur QR Studio'
+        : user.displayName.isNotEmpty
+        ? user.displayName
+        : 'Mon compte';
+    final secondary = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.md,
@@ -285,22 +304,23 @@ class _ProfileHeaderState extends State<_ProfileHeader> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (name.isNotEmpty)
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall,
-                  ),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall,
+                ),
                 if (user.email case final email?)
                   Text(
                     email,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: secondary,
                   ),
+                Text(
+                  user.isAnonymous ? 'Compte anonyme' : 'Compte synchronisé',
+                  style: secondary,
+                ),
               ],
             ),
           ),

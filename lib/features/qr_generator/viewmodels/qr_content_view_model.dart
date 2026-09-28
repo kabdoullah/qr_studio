@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../auth/viewmodels/auth_view_model.dart';
 import '../../qr_history/viewmodels/qr_history_view_model.dart';
 
 import '../models/business_card_data.dart';
@@ -36,6 +37,9 @@ class QrContentViewModel extends _$QrContentViewModel {
   static const String saveFailedMessage =
       "Impossible d'enregistrer votre QR Code.\n"
       'Vérifiez votre connexion et réessayez.';
+  static const String notSavedMessage =
+      "Votre QR Code fonctionne, mais il n'a pas pu être enregistré dans "
+      '« Mes QR Codes ».\nVérifiez votre connexion puis générez-le à nouveau.';
 
   @override
   QrContentState build() => const QrContentState();
@@ -160,6 +164,10 @@ class QrContentViewModel extends _$QrContentViewModel {
   // `null` en cas d'échec : saisie invalide (les erreurs de ce type
   // deviennent toutes visibles), envoi du fichier ou enregistrement refusé
   // (le message est placé dans l'état).
+  //
+  // Les types statiques (texte, Wi-Fi, coordonnées, site web) sont produits sur
+  // l'appareil : ils ne dépendent ni du compte ni du serveur, et un échec
+  // d'enregistrement ne les empêche jamais d'être générés.
   Future<QrCodeData?> generateQr() async {
     final type = ref.read(qrGeneratorViewModelProvider);
     if (type == null || state.saving.isSaving) return null;
@@ -183,44 +191,87 @@ class QrContentViewModel extends _$QrContentViewModel {
       QrType.wifi when state.isWifiValid => _qrService.generateWifiPayload(
         state.wifi,
       ),
+      QrType.website when state.isWebsiteValid =>
+        _qrService.generateWebsitePayload(state.website),
       _ => null,
     };
     final isValid = switch (type) {
       QrType.cv => true,
       QrType.businessCard when linkedKind != null => true,
       QrType.socialMedia => state.isSocialPageValid,
-      QrType.website => state.isWebsiteValid,
       _ =>
         staticPayload != null &&
             // Garde-fou : un contenu trop volumineux ne produirait pas de
             // QR Code.
             QrService.fitsInQrCode(staticPayload),
     };
-    final file = isValid && linkedKind != null
-        ? await _upload(linkedKind)
-        : null;
-    if (!isValid || (linkedKind != null && file == null)) {
-      state = state.copyWith(
-        showErrorsFor: {...state.showErrorsFor, type},
-        failedGenerations: state.failedGenerations + 1,
-      );
-      return null;
+    if (!isValid) return _rejectInput(type);
+    if (staticPayload != null) return _generateStatic(type, staticPayload);
+
+    // Contenu en ligne (`/q/{slug}`) : l'adresse n'existe qu'une fois le QR
+    // Code enregistré, avec la session anonyme ou le compte.
+    if (ref.read(qrCodeServiceProvider) != null) {
+      final error = await _ensureSession(type);
+      if (error != null) {
+        _setSave(SaveState(errorMessage: error, type: type));
+        return null;
+      }
     }
+    final file = linkedKind != null ? await _upload(linkedKind) : null;
+    if (linkedKind != null && file == null) return _rejectInput(type);
 
     final saved = await _save(type, file);
     if (saved == null) return null;
-    final payload =
-        staticPayload ??
-        switch (type) {
-          QrType.socialMedia => _qrService.generateSocialMediaPayload(
-            saved.publicUrl,
-          ),
-          QrType.website => _qrService.generateWebsitePayload(saved.publicUrl),
-          _ => _qrService.generateLinkPayload(saved.publicUrl),
-        };
+    final payload = type == QrType.socialMedia
+        ? _qrService.generateSocialMediaPayload(saved.publicUrl)
+        : _qrService.generateLinkPayload(saved.publicUrl);
     final result = QrCodeData(type: type, payload: payload, file: file);
     state = state.copyWith(result: result, editing: saved);
     return result;
+  }
+
+  // QR Code statique : le résultat est toujours produit ; l'enregistrement
+  // dans « Mes QR Codes » est tenté, et son échec (hors ligne, serveur
+  // injoignable) n'est signalé que par un avertissement.
+  Future<QrCodeData> _generateStatic(QrType type, String payload) async {
+    final result = QrCodeData(type: type, payload: payload);
+    // Sans serveur configuré, il n'y a rien à enregistrer.
+    if (ref.read(qrCodeServiceProvider) == null) {
+      state = state.copyWith(result: result);
+      return result;
+    }
+    final saved = await _ensureSession(type) == null
+        ? await _save(type, null)
+        : null;
+    if (saved == null) {
+      _setSave(SaveState(errorMessage: notSavedMessage, type: type));
+    }
+    state = state.copyWith(result: result, editing: saved);
+    return result;
+  }
+
+  // La session s'ouvre en arrière-plan au lancement : l'attend (ou la
+  // retente) avant tout envoi au serveur. Renvoie `null` si elle est
+  // ouverte, sinon le message à afficher.
+  Future<String?> _ensureSession(QrType type) async {
+    _setSave(SaveState(isSaving: true, type: type));
+    final opened = await ref
+        .read(authViewModelProvider.notifier)
+        .ensureSession();
+    _setSave(const SaveState());
+    if (opened) return null;
+    return ref.read(authViewModelProvider).notice ??
+        AuthViewModel.restoreFailedMessage;
+  }
+
+  // Saisie invalide ou fichier non envoyé : toutes les erreurs de ce type
+  // deviennent visibles.
+  QrCodeData? _rejectInput(QrType type) {
+    state = state.copyWith(
+      showErrorsFor: {...state.showErrorsFor, type},
+      failedGenerations: state.failedGenerations + 1,
+    );
+    return null;
   }
 
   // Ouvre un QR Code enregistré (historique) : sa saisie remplit le
@@ -500,9 +551,20 @@ LivePreview? livePreview(Ref ref) {
         );
       }
       return fromPayload(service.generateWifiPayload(wifi));
-    // L'adresse publique d'un fichier, d'une page ou d'un site n'existe
-    // qu'après l'enregistrement.
-    case QrType.cv || QrType.socialMedia || QrType.website || null:
+    case QrType.website:
+      final site = ref.watch(
+        qrContentViewModelProvider.select((s) => s.website),
+      );
+      // L'erreur éventuelle est déjà affichée sous le champ.
+      if (QrContentState.validateWebsiteUrl(site.url) != null) {
+        return const LivePreview.placeholder(
+          "Saisissez une adresse valide pour voir l'aperçu.",
+        );
+      }
+      return fromPayload(service.generateWebsitePayload(site));
+    // L'adresse publique d'un fichier ou d'une page n'existe qu'après
+    // l'enregistrement.
+    case QrType.cv || QrType.socialMedia || null:
       return null;
   }
 }

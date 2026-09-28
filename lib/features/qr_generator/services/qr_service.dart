@@ -9,6 +9,7 @@ import '../models/qr_type.dart';
 import '../models/saved_qr_code.dart';
 import '../models/social_network.dart';
 import '../models/text_qr_data.dart';
+import '../models/website_qr_data.dart';
 import '../models/wifi_qr_data.dart';
 
 part 'qr_service.g.dart';
@@ -56,17 +57,19 @@ class QrService {
   }
 
   // Le QR Code d'un contenu en ligne (CV, image de carte de visite, page de
-  // réseaux sociaux, site web) contient uniquement son URL publique.
+  // réseaux sociaux) contient uniquement son URL publique.
   String generateLinkPayload(String remoteUrl) => remoteUrl.trim();
 
-  // Réseaux sociaux et site web : l'adresse publique QR Studio
-  // (`/q/{slug}`), jamais les liens eux-mêmes, pour pouvoir les modifier
-  // sans réimprimer le QR Code.
+  // Réseaux sociaux : l'adresse publique QR Studio (`/q/{slug}`), jamais
+  // les liens eux-mêmes, pour pouvoir les modifier sans réimprimer le QR
+  // Code.
   String generateSocialMediaPayload(String publicUrl) =>
       generateLinkPayload(publicUrl);
 
-  String generateWebsitePayload(String publicUrl) =>
-      generateLinkPayload(publicUrl);
+  // Site web : l'adresse du site elle-même, ouverte directement au scan
+  // (« exemple.com » devient « https://exemple.com »).
+  String generateWebsitePayload(WebsiteQrData data) =>
+      WebsiteQrData.normalizeUrl(data.url);
 
   // Le texte est encodé tel quel, sans modification.
   String generateTextPayload(TextQrData data) => data.text;
@@ -91,6 +94,9 @@ class QrService {
     return switch (saved.type) {
       QrType.text => generateTextPayload(TextQrData.fromJson(saved.content)),
       QrType.wifi => generateWifiPayload(WifiQrData.fromJson(saved.content)),
+      QrType.website => generateWebsitePayload(
+        WebsiteQrData.fromJson(saved.title, saved.content),
+      ),
       QrType.businessCard when saved.content['mode'] == 'details' =>
         generateBusinessCardPayload(
           BusinessCardData.fromJson(saved.section('details')),

@@ -9,7 +9,9 @@ import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_layout.dart';
 import '../widgets/social_sign_in_buttons.dart';
 
-// Connexion. Une fois connecté, le routeur ouvre l'accueil.
+// Connexion à un compte existant. Facultative : ouverte depuis les
+// Paramètres (ou l'avis « session expirée » de l'accueil). Une fois
+// connecté, retour à l'accueil.
 class LoginView extends ConsumerStatefulWidget {
   const LoginView({super.key});
 
@@ -39,12 +41,16 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
   @override
   Widget build(BuildContext context) {
+    goHomeOnSession(ref, context);
     final auth = ref.watch(authViewModelProvider);
     return AuthLayout(
       title: 'Vos QR Codes,\nau même endroit.',
-      subtitle:
-          'Connectez-vous pour créer, retrouver et partager vos QR Codes.',
+      subtitle: auth.isAnonymous
+          ? 'Connectez-vous à votre compte existant. Pour garder les '
+                'QR Codes créés sur cet appareil, créez plutôt un compte.'
+          : 'Connectez-vous pour retrouver les QR Codes de votre compte.',
       errorMessage: auth.errorMessage,
+      showBackButton: true,
       children: [
         Form(
           key: _formKey,
@@ -90,7 +96,8 @@ class _LoginViewState extends ConsumerState<LoginView> {
               ? null
               : () {
                   ref.read(authViewModelProvider.notifier).clearError();
-                  context.push(AppRoutes.register);
+                  // L'écran est remplacé : le retour ramène à l'accueil.
+                  context.pushReplacement(AppRoutes.register);
                 },
         ),
       ],

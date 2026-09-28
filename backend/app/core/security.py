@@ -3,6 +3,7 @@ renouvellement (opaques)."""
 
 import hashlib
 import secrets
+import uuid
 from datetime import timedelta
 from typing import Optional, Tuple
 
@@ -67,3 +68,9 @@ def new_refresh_token() -> Tuple[str, str]:
 
 def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def hash_installation_id(installation_id: uuid.UUID) -> str:
+    """Empreinte d'un identifiant d'installation (UUID aléatoire, 122 bits) :
+    comme un jeton de renouvellement, un SHA-256 suffit."""
+    return hashlib.sha256(str(installation_id).encode()).hexdigest()

@@ -24,8 +24,9 @@ class User(TimestampMixin, Base):
     email: Mapped[Optional[str]] = mapped_column(String(254), unique=True)
     # `None` pour un compte créé uniquement via Google ou Facebook.
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
-    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # `None` pour un utilisateur anonyme.
+    first_name: Mapped[Optional[str]] = mapped_column(String(100))
+    last_name: Mapped[Optional[str]] = mapped_column(String(100))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Adresse confirmée par un fournisseur de confiance (Google). Les
@@ -33,6 +34,17 @@ class User(TimestampMixin, Base):
     email_verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # Compte créé automatiquement au premier lancement, sans email ni mot
+    # de passe. Il devient un compte enregistré (même `id`, mêmes QR Codes)
+    # à l'inscription ou à la connexion Google/Facebook.
+    is_anonymous: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    # SHA-256 de l'identifiant d'installation de l'application (jamais
+    # l'identifiant lui-même : il permet d'ouvrir une session anonyme).
+    # Renseigné seulement pour un compte anonyme ; effacé à la conversion,
+    # pour que l'installation ne donne jamais accès au compte enregistré.
+    installation_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True)
 
 
 class AuthIdentity(TimestampMixin, Base):

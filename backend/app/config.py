@@ -54,6 +54,9 @@ class Settings:
     # Tentatives de connexion et d'inscription par heure (force brute).
     auth_attempts_per_client_per_hour: int = 30
     auth_attempts_per_hour: int = 1000
+    # Sessions anonymes ouvertes par heure (chacune peut créer un compte).
+    anonymous_sessions_per_client_per_hour: int = 20
+    anonymous_sessions_per_hour: int = 1000
     # Crée les tables SQLAlchemy au démarrage (tests). En production, le
     # schéma est géré par Alembic (`alembic upgrade head`).
     auto_create_schema: bool = False

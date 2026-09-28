@@ -77,6 +77,7 @@ class QrResultView extends ConsumerWidget {
                       ),
                     ),
                   ],
+                  const _NotSavedNotice(),
                   const SizedBox(height: AppSpacing.xl),
                   _ExportButtons(result: result),
                   const SizedBox(height: AppSpacing.sm),
@@ -98,6 +99,46 @@ class QrResultView extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Avertissement discret : le QR Code statique fonctionne, mais n'a pas pu
+// être enregistré dans « Mes QR Codes » (hors ligne, serveur injoignable).
+class _NotSavedNotice extends ConsumerWidget {
+  const _NotSavedNotice();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final message = ref.watch(
+      qrContentViewModelProvider.select(
+        (s) => s.saving.type == s.result?.type ? s.saving.errorMessage : null,
+      ),
+    );
+    if (message == null) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final warning = AppStatusColors.of(context).warning;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 20, color: warning),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

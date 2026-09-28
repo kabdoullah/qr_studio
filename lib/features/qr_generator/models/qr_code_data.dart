@@ -19,7 +19,8 @@ class QrCodeData {
   // visite), ou `null` s'il n'y en a pas.
   final SharedFile? file;
 
-  // Le QR Code mène à une adresse en ligne (`/q/{slug}`) : le lien est
-  // alors affiché et joint au partage.
-  bool get isOnlineLink => type.isDynamic || file != null;
+  // Le QR Code mène à une adresse en ligne (`/q/{slug}`, ou le site
+  // lui-même) : le lien est alors affiché et joint au partage.
+  bool get isOnlineLink =>
+      type.isDynamic || type == QrType.website || file != null;
 }

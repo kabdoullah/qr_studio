@@ -11,7 +11,8 @@ import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_layout.dart';
 import '../widgets/social_sign_in_buttons.dart';
 
-// Création de compte. Le compte créé est aussitôt connecté.
+// Création de compte. Pour l'utilisateur anonyme, c'est une conversion :
+// même compte, ses QR Codes sont conservés. Le compte est aussitôt connecté.
 class RegisterView extends ConsumerStatefulWidget {
   const RegisterView({super.key});
 
@@ -56,10 +57,14 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
 
   @override
   Widget build(BuildContext context) {
+    goHomeOnSession(ref, context);
     final auth = ref.watch(authViewModelProvider);
     return AuthLayout(
       title: 'Créer un compte',
-      subtitle: 'Retrouvez vos QR Codes sur tous vos appareils.',
+      subtitle: auth.isAnonymous
+          ? 'Vos QR Codes déjà créés sont conservés, et vous les '
+                'retrouverez sur tous vos appareils.'
+          : 'Retrouvez vos QR Codes sur tous vos appareils.',
       errorMessage: auth.errorMessage,
       showBackButton: true,
       children: [
@@ -142,9 +147,8 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               ? null
               : () {
                   ref.read(authViewModelProvider.notifier).clearError();
-                  context.canPop()
-                      ? context.pop()
-                      : context.go(AppRoutes.login);
+                  // L'écran est remplacé : le retour ramène à l'accueil.
+                  context.pushReplacement(AppRoutes.login);
                 },
         ),
       ],

@@ -52,6 +52,8 @@ _AUTH_PATHS = (
     "/api/v1/auth/social/google",
     "/api/v1/auth/social/facebook",
 )
+# Création de comptes anonymes limitée par heure.
+_ANONYMOUS_PATHS = ("/api/v1/auth/anonymous",)
 
 
 def _sniff_pdf(head: bytes) -> Optional[str]:
@@ -112,6 +114,10 @@ def create_app(
         _AUTH_PATHS: UploadRateLimiter(
             per_client=settings.auth_attempts_per_client_per_hour,
             total=settings.auth_attempts_per_hour,
+        ),
+        _ANONYMOUS_PATHS: UploadRateLimiter(
+            per_client=settings.anonymous_sessions_per_client_per_hour,
+            total=settings.anonymous_sessions_per_hour,
         ),
     }
     engine = create_engine(settings)
