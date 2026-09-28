@@ -307,6 +307,47 @@ void main() {
     expect(facebook.signOuts, 1);
   });
 
+  group('suppression du compte', () {
+    test('supprimé côté serveur, puis session anonyme de l’installation, '
+        'sans appel de déconnexion', () async {
+      await start(token: 'refresh');
+
+      final message = await viewModel().deleteAccount();
+
+      expect(message, AuthViewModel.accountDeletedMessage);
+      expect(auth.deletedAccounts, 1);
+      expect(auth.loggedOut, isEmpty);
+      expect(state().status, AuthStatus.anonymous);
+      expect(state().isSubmitting, isFalse);
+      expect(storage.refreshToken, 'refresh-2');
+      expect(container.read(sessionTokenProvider)?.accessToken, 'access-2');
+      expect(google.signOuts, 1);
+      expect(facebook.signOuts, 1);
+    });
+
+    test('échec : le compte reste ouvert, avec le message', () async {
+      await start(token: 'refresh');
+      auth.deleteError = const ApiException(ApiErrorKind.offline);
+
+      final message = await viewModel().deleteAccount();
+
+      expect(message, const ApiException(ApiErrorKind.offline).message);
+      expect(state().status, AuthStatus.authenticated);
+      expect(state().isSubmitting, isFalse);
+      expect(storage.refreshToken, 'refresh-1');
+      expect(google.signOuts, 0);
+    });
+
+    test('utilisateur anonyme : rien n’est supprimé', () async {
+      await start();
+
+      await viewModel().deleteAccount();
+
+      expect(auth.deletedAccounts, 0);
+      expect(state().status, AuthStatus.anonymous);
+    });
+  });
+
   test('session anonyme refusée pendant l’usage : rouverte sans message, '
       'même utilisateur', () async {
     await start();

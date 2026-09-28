@@ -289,6 +289,50 @@ void main() {
     expect(storage.refreshToken, 'refresh-2');
   });
 
+  testWidgets('supprimer mon compte : confirmation, puis accueil sans compte', (
+    tester,
+  ) async {
+    await pumpApp(tester, token: 'jeton');
+
+    await tester.tap(find.text('Paramètres'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Supprimer mon compte'));
+    await tester.pumpAndSettle();
+    expect(find.text('Supprimer votre compte ?'), findsOneWidget);
+
+    // Annuler : rien n'est supprimé.
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    expect(auth.deletedAccounts, 0);
+    expect(authState(tester).status, AuthStatus.authenticated);
+
+    await tester.tap(find.text('Paramètres'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Supprimer mon compte'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Supprimer mon compte'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(auth.deletedAccounts, 1);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Votre compte a été supprimé.'), findsOneWidget);
+    expect(authState(tester).status, AuthStatus.anonymous);
+  });
+
+  testWidgets('sans compte, pas de suppression proposée', (tester) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Paramètres'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Supprimer mon compte'), findsNothing);
+  });
+
   testWidgets('sans configuration, ni Google ni Facebook', (tester) async {
     await pumpApp(tester);
     await openLogin(tester);

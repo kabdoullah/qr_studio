@@ -1,4 +1,5 @@
-"""Pages HTML publiques, autonomes et sans JavaScript (pages `/s/` et `/q/`)."""
+"""Pages HTML publiques, autonomes et sans JavaScript (pages `/s/`, `/q/`,
+confidentialité et suppression de compte)."""
 
 from html import escape
 from typing import Iterable, Tuple
@@ -121,6 +122,12 @@ h1 {{ margin: 0 0 8px; font-size: 26px; line-height: 1.25; word-wrap: break-word
   text-decoration: none;
 }}
 .card-image {{ width: 100%; margin-top: 24px; border-radius: 16px; }}
+.legal {{ text-align: left; }}
+.legal h2 {{ margin: 32px 0 8px; font-size: 19px; }}
+.legal p, .legal li {{ color: var(--muted); }}
+.legal strong {{ color: var(--text); }}
+.legal a {{ color: var(--accent); }}
+.legal ul, .legal ol {{ padding-left: 22px; }}
 footer {{ margin-top: 40px; font-size: 13px; color: var(--muted); }}
 </style>
 </head>

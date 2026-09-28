@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import Settings
 from ...core.database import utc_now
+from ...storage import FileStore
+from ..qr_codes.repository import QrCodeRepository
 from ...core.security import (
     create_access_token,
     hash_installation_id,
@@ -288,6 +290,26 @@ class AuthService:
     async def logout_all(self, user: User) -> None:
         await self._tokens.revoke_all(user.id, utc_now())
         await self._session.commit()
+
+    # --- Suppression du compte ---
+
+    async def delete_account(self, user: User, store: FileStore) -> None:
+        """Supprime définitivement le compte et tout ce qui lui appartient :
+        QR Codes (leurs adresses `/q/…` deviennent indisponibles), comptes
+        Google/Facebook liés, sessions et fichiers mis en ligne.
+
+        Les lignes sont supprimées explicitement (et non par les cascades de
+        la base, qu'SQLite n'applique pas), dans une seule transaction ; les
+        fichiers ensuite, comme pour la suppression d'un QR Code.
+        """
+        qr_codes = QrCodeRepository(self._session)
+        for qr in await qr_codes.list_for_user(user.id):
+            await qr_codes.delete(qr)
+        await self._identities.delete_for_user(user.id)
+        await self._tokens.delete_for_user(user.id)
+        await self._session.delete(user)
+        await self._session.commit()
+        await run_in_threadpool(store.delete_owned, str(user.id))
 
     async def _revoke_session(self, session_id: uuid.UUID) -> None:
         await self._tokens.revoke_session(session_id, utc_now())

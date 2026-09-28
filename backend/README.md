@@ -25,11 +25,13 @@ sont aussi enregistrés sur le compte.
 | POST    | `/api/v1/auth/logout`          | `{"refresh_token"}` : termine cette session → `204` |
 | POST    | `/api/v1/auth/logout-all`      | Termine toutes les sessions du compte (jeton d'accès requis) → `204` |
 | GET     | `/api/v1/auth/me`              | `{id, email, first_name, last_name, avatar_url, email_verified, is_anonymous, …}` |
+| DELETE  | `/api/v1/auth/me`              | Suppression définitive du compte → `204`          |
 | GET     | `/api/v1/qr-codes`             | QR Codes du compte, plus récents d'abord          |
 | POST    | `/api/v1/qr-codes`             | Création : `{"type", "title", "content"}`         |
 | GET/PUT/DELETE | `/api/v1/qr-codes/{id}` | Lecture, modification (même slug), suppression   |
 | GET     | `/api/v1/public/q/{slug}`      | Contenu public, sans compte (JSON)                |
 | GET     | `/q/{slug}`                    | Page publique ouverte au scan (HTML, sans JavaScript) |
+| GET     | `/privacy`, `/account/delete`  | Politique de confidentialité et marche à suivre pour supprimer son compte (HTML, pour Google Play) |
 
 - **Utilisateurs anonymes (anonymous-first)** : l'application n'exige pas
   de compte. Au premier lancement, elle génère un identifiant
@@ -100,6 +102,12 @@ sont aussi enregistrés sur le compte.
   l'accès public ; les erreurs `422` ne renvoient jamais les valeurs saisies.
 - **Suppression** : réelle (contenu et fichier) ; l'adresse `/q/{slug}`
   affiche ensuite « QR Code indisponible » (`404`).
+- **Suppression du compte** (`DELETE auth/me`, exigée par Google Play) :
+  QR Codes et leur contenu, identités Google/Facebook, jetons et tous les
+  fichiers envoyés par le compte (`files.owner_id`), dans une transaction
+  puis le stockage. L'adresse email redevient libre. Les cartes de
+  l'annuaire public et les pages `/s/`, sans propriétaire, ne sont pas
+  concernées (retrait sur demande par email).
 
 Schéma : SQLAlchemy 2 async (asyncpg en production, SQLite en
 développement), migré par Alembic (`migrations/`). Tables `users`, `auth_identities`,

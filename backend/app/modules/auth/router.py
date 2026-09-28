@@ -7,9 +7,12 @@ from ...config import Settings
 from ...core.database import get_session
 from ...core.dependencies import (
     get_current_active_user,
+    get_current_user,
+    get_file_store,
     get_optional_user,
     get_settings,
 )
+from ...storage import FileStore
 from .models import User
 from .schemas import (
     AnonymousIn,
@@ -150,3 +153,15 @@ async def logout_all(
 @router.get("/me", response_model=UserOut)
 async def me(user: User = Depends(get_current_active_user)) -> User:
     return user
+
+
+# Suppression définitive (exigée par Google Play). Un compte désactivé peut
+# aussi être supprimé.
+@router.delete("/me", status_code=204)
+async def delete_me(
+    user: User = Depends(get_current_user),
+    store: FileStore = Depends(get_file_store),
+    service: AuthService = Depends(_service),
+) -> Response:
+    await service.delete_account(user, store)
+    return Response(status_code=204)

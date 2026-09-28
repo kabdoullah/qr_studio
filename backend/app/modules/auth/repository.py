@@ -49,6 +49,11 @@ class IdentityRepository:
         await self._session.flush()
         return identity
 
+    async def delete_for_user(self, user_id: uuid.UUID) -> None:
+        await self._session.execute(
+            delete(AuthIdentity).where(AuthIdentity.user_id == user_id)
+        )
+
 
 class RefreshTokenRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -92,6 +97,11 @@ class RefreshTokenRepository:
             update(RefreshToken)
             .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
             .values(revoked_at=now)
+        )
+
+    async def delete_for_user(self, user_id: uuid.UUID) -> None:
+        await self._session.execute(
+            delete(RefreshToken).where(RefreshToken.user_id == user_id)
         )
 
     async def delete_expired(self, user_id: uuid.UUID, now: datetime) -> None:
