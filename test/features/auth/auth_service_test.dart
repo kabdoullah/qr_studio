@@ -67,6 +67,14 @@ void main() {
     expect(bearer(), 'Bearer jeton-anonyme');
   });
 
+  test('suppression du compte : DELETE auth/me avec la session', () async {
+    await service.deleteAccount();
+
+    expect(adapter.requests.single.method, 'DELETE');
+    expect(adapter.requests.single.uri.path, '/api/v1/auth/me');
+    expect(bearer(), 'Bearer jeton-anonyme');
+  });
+
   test('Google et Facebook : envoyés avec la session', () async {
     await service.loginWithGoogle('id-token');
     expect(bearer(), 'Bearer jeton-anonyme');

@@ -26,6 +26,7 @@ from .config import Settings
 from .core.database import Base, create_engine, create_sessionmaker
 from .core.dependencies import get_current_active_user
 from .database import create_database
+from .legal_pages import create_legal_router
 from .modules.auth.models import User
 from .modules.auth.router import router as auth_router
 from .modules.auth.social import SocialAuthProvider, create_providers
@@ -247,6 +248,7 @@ def create_app(
     app.include_router(public_qr_router)
     app.include_router(create_cards_router(card_store))
     app.include_router(create_social_pages_router(page_store, settings.public_url))
+    app.include_router(create_legal_router())
 
     @app.get("/health")
     def health() -> Dict[str, str]:

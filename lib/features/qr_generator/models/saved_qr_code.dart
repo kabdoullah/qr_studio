@@ -55,6 +55,11 @@ class SavedQrCode {
     if (updatedAt case final date?) 'updated_at': date.toIso8601String(),
   };
 
+  // Réseaux sociaux en mode discussion WhatsApp : le QR Code contient le
+  // lien wa.me, pas l'adresse `/q/{slug}`.
+  bool get isWhatsApp =>
+      type == QrType.socialMedia && content['mode'] == 'whatsapp';
+
   // Contenu d'un objet imbriqué (ex. `details` d'une carte de visite).
   Map<String, Object?> section(String name) =>
       content[name] is Map<String, Object?>

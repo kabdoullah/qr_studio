@@ -362,6 +362,15 @@ class FakeAuthService implements AuthService {
   @override
   Future<void> logout(String refreshToken) async => loggedOut.add(refreshToken);
 
+  Object? deleteError;
+  int deletedAccounts = 0;
+
+  @override
+  Future<void> deleteAccount() async {
+    if (deleteError case final e?) throw e;
+    deletedAccounts++;
+  }
+
   @override
   Future<AppUser> me() async {
     if (meError case final e?) throw e;

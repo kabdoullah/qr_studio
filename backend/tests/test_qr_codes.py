@@ -362,6 +362,55 @@ def test_social_media_validation(client, change):
     assert create(client, {**SOCIAL, **change}).status_code == 422
 
 
+WHATSAPP = {
+    "type": "social_media",
+    "title": "Contactez-moi sur WhatsApp",
+    "content": {
+        "mode": "whatsapp",
+        "links": [{"platform": "whatsapp", "url": "https://wa.me/2250712345678"}],
+        "message": "Bonjour, je viens de scanner votre QR Code.",
+    },
+}
+
+
+def test_whatsapp_keeps_mode_and_message(client):
+    qr = create(client, WHATSAPP).json()
+
+    assert qr["content"]["mode"] == "whatsapp"
+    assert qr["content"]["message"] == "Bonjour, je viens de scanner votre QR Code."
+    assert qr["content"]["links"][0]["url"] == "https://wa.me/2250712345678"
+    assert public(client, qr["slug"]).json()["links"] == [
+        {
+            "platform": "whatsapp",
+            "label": "WhatsApp",
+            "url": "https://wa.me/2250712345678"
+            "?text=Bonjour%2C%20je%20viens%20de%20scanner%20votre%20QR%20Code.",
+        }
+    ]
+
+
+def test_social_page_defaults_to_page_mode_without_message(client):
+    body = {**SOCIAL, "content": {**SOCIAL["content"], "message": "ignoré"}}
+
+    content = create(client, body).json()["content"]
+
+    assert content["mode"] == "page"
+    assert content["message"] == ""
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {**WHATSAPP["content"], "links": SOCIAL["content"]["links"]},
+        {**WHATSAPP["content"], "links": [{"platform": "instagram", "url": "https://instagram.com/a"}]},
+        {**WHATSAPP["content"], "message": "x" * 301},
+        {**WHATSAPP["content"], "mode": "sms"},
+    ],
+)
+def test_whatsapp_validation(client, content):
+    assert create(client, {**WHATSAPP, "content": content}).status_code == 422
+
+
 # --- Site web ---
 
 

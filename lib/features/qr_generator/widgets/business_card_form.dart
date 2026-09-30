@@ -185,6 +185,8 @@ class _BusinessCardFormState extends ConsumerState<BusinessCardForm> {
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.done,
               onChanged: (v) => update((c) => c.copyWith(whatsapp: v)),
+              validator: (v) =>
+                  QrContentState.validateOptionalWhatsAppPhone(v ?? ''),
             ),
           ],
         ),

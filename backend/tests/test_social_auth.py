@@ -123,6 +123,19 @@ def signup(client, email="awa@gmail.com") -> dict:
 # --- Google ---
 
 
+def test_deleted_account_releases_its_google_identity(client):
+    first = google(client).json()
+
+    deleted = client.delete(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {first['access_token']}"}
+    )
+
+    assert deleted.status_code == 204
+    again = google(client)
+    assert again.status_code == 200
+    assert again.json()["user"]["id"] != first["user"]["id"]
+
+
 def test_google_creates_a_verified_account(client):
     response = google(client)
 

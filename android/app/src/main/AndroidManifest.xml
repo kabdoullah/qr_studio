@@ -51,6 +51,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Ouverture de la politique de confidentialité (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <!-- Connexion Facebook via l'application Facebook, si installée. -->
         <package android:name="com.facebook.katana" />
     </queries>

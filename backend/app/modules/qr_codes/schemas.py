@@ -117,10 +117,25 @@ class SocialLinkIn(BaseModel):
 
 
 class SocialMediaIn(BaseModel):
+    # `page` : page publique de liens (`/q/{slug}`). `whatsapp` : le QR Code
+    # contient directement le lien wa.me ; un seul lien WhatsApp, et le
+    # message prérempli à part.
+    mode: Literal["page", "whatsapp"] = "page"
     description: str = Field("", max_length=300)
     links: List[SocialLinkIn] = Field(min_length=1, max_length=15)
+    message: str = Field("", max_length=300)
 
-    _strip_text = field_validator("description", mode="before")(_strip)
+    _strip_text = field_validator("description", "message", mode="before")(_strip)
+
+    @model_validator(mode="after")
+    def _check_mode(self) -> "SocialMediaIn":
+        if self.mode == "page":
+            self.message = ""
+        elif len(self.links) != 1 or self.links[0].platform != "whatsapp":
+            raise ValueError("Un seul numéro WhatsApp est attendu.")
+        else:
+            self.description = ""
+        return self
 
 
 # --- QR Code complet (création et modification) ---

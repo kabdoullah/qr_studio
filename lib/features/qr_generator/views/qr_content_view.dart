@@ -15,7 +15,7 @@ import '../models/shared_file.dart';
 import '../widgets/business_card_content.dart';
 import '../widgets/shared_file_picker.dart';
 import '../widgets/qr_live_preview.dart';
-import '../widgets/social_page_form.dart';
+import '../widgets/social_media_content.dart';
 import '../widgets/text_form.dart';
 import '../widgets/website_form.dart';
 import '../widgets/wifi_form.dart';
@@ -31,7 +31,7 @@ class QrContentView extends ConsumerWidget {
       QrType.businessCard => const BusinessCardContent(),
       QrType.text => const TextForm(),
       QrType.cv => const SharedFilePicker(kind: SharedFileKind.cv),
-      QrType.socialMedia => const SocialPageForm(),
+      QrType.socialMedia => const SocialMediaContent(),
       QrType.website => const WebsiteForm(),
       QrType.wifi => const WifiForm(),
       null => const SizedBox.shrink(),

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_dimens.dart';
+import '../../../core/constants/api_config.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../auth/models/app_user.dart';
 import '../../auth/viewmodels/auth_view_model.dart';
+import '../../auth/widgets/delete_account_dialog.dart';
 import '../models/qr_type.dart';
 import '../viewmodels/qr_generator_view_model.dart';
 import '../widgets/qr_type_card.dart';
@@ -147,8 +150,8 @@ class _TypeGrid extends StatelessWidget {
 }
 
 // Paramètres : identité, « Mes QR Codes », puis création de compte et
-// connexion (facultatives) sans compte, déconnexion pour un compte
-// enregistré.
+// connexion (facultatives) sans compte, déconnexion et suppression pour un
+// compte enregistré, et la politique de confidentialité.
 class _SettingsMenu extends ConsumerWidget {
   const _SettingsMenu();
 
@@ -168,6 +171,8 @@ class _SettingsMenu extends ConsumerWidget {
         _AccountAction.login => context.push(AppRoutes.login),
         _AccountAction.logout =>
           ref.read(authViewModelProvider.notifier).logout(),
+        _AccountAction.deleteAccount => _deleteAccount(context),
+        _AccountAction.privacy => _openPrivacyPolicy(context),
       },
       itemBuilder: (context) => [
         if (user != null) ...[
@@ -196,14 +201,32 @@ class _SettingsMenu extends ConsumerWidget {
               title: Text('Se connecter'),
             ),
           ),
-        ] else
-          const PopupMenuItem(
+        ] else ...const [
+          PopupMenuItem(
             value: _AccountAction.logout,
             child: ListTile(
               leading: Icon(Icons.logout_rounded),
               title: Text('Se déconnecter'),
             ),
           ),
+          PopupMenuItem(
+            value: _AccountAction.deleteAccount,
+            child: ListTile(
+              leading: Icon(Icons.delete_forever_outlined),
+              title: Text('Supprimer mon compte'),
+            ),
+          ),
+        ],
+        if (privacyPolicyUri != null) ...const [
+          PopupMenuDivider(),
+          PopupMenuItem(
+            value: _AccountAction.privacy,
+            child: ListTile(
+              leading: Icon(Icons.privacy_tip_outlined),
+              title: Text('Politique de confidentialité'),
+            ),
+          ),
+        ],
       ],
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: AppLayout.minTapTarget),
@@ -222,9 +245,30 @@ class _SettingsMenu extends ConsumerWidget {
       ),
     );
   }
+
+  static Future<void> _deleteAccount(BuildContext context) async {
+    final message = await showDeleteAccountDialog(context);
+    if (message != null && context.mounted) _showMessage(context, message);
+  }
+
+  static Future<void> _openPrivacyPolicy(BuildContext context) async {
+    final opened = await launchUrl(
+      privacyPolicyUri!,
+      mode: LaunchMode.externalApplication,
+    ).catchError((Object _) => false);
+    if (!opened && context.mounted) {
+      _showMessage(context, "Impossible d'ouvrir la page. Réessayez.");
+    }
+  }
+
+  static void _showMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 }
 
-enum _AccountAction { history, register, login, logout }
+enum _AccountAction { history, register, login, logout, deleteAccount, privacy }
 
 // Initiales de l'utilisateur dans une pastille.
 class _Avatar extends StatelessWidget {

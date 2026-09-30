@@ -119,6 +119,10 @@ class SocialMediaProfile(TimestampMixin, Base):
     )
     # Le titre de la page est celui du QR Code (`qr_codes.title`).
     description: Mapped[str] = mapped_column(String(300), default="")
+    # `page` ou `whatsapp` (discussion ouverte directement au scan : un seul
+    # lien wa.me, message prérempli dans `message`).
+    mode: Mapped[str] = mapped_column(String(10), default="page", server_default="page")
+    message: Mapped[str] = mapped_column(String(300), default="", server_default="")
     links: Mapped[List["SocialMediaLink"]] = relationship(
         cascade="all, delete-orphan",
         lazy="selectin",

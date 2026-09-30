@@ -81,6 +81,10 @@ class AuthService {
     }, authenticated: false);
   }
 
+  // Suppression définitive du compte de la session et de tout son contenu
+  // (QR Codes, fichiers, sessions sur tous les appareils).
+  Future<void> deleteAccount() => _api.delete('api/v1/auth/me');
+
   // Compte de la session en cours (vérifié par le serveur).
   Future<AppUser> me() async {
     final user = AppUser.fromJson(await _api.get('api/v1/auth/me'));

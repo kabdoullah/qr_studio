@@ -9,6 +9,7 @@ import '../models/saved_qr_code.dart';
 import '../models/social_page_data.dart';
 import '../models/text_qr_data.dart';
 import '../models/website_qr_data.dart';
+import '../models/whatsapp_qr_data.dart';
 import '../models/wifi_qr_data.dart';
 import '../services/qr_service.dart';
 
@@ -52,6 +53,10 @@ class SaveState {
 // de la carte partagée par lien.
 enum BusinessCardMode { details, image }
 
+// Réseaux sociaux : page publique listant plusieurs réseaux (QR dynamique),
+// ou discussion WhatsApp ouverte directement au scan (QR statique).
+enum SocialMediaMode { page, whatsapp }
+
 // État de la saisie du contenu, conservé tant que l'utilisateur navigue
 // entre le formulaire et le résultat.
 class QrContentState {
@@ -63,6 +68,8 @@ class QrContentState {
     this.cv = const FileState(),
     this.cardImage = const FileState(),
     this.socialPage = const SocialPageData(),
+    this.socialMediaMode = SocialMediaMode.page,
+    this.whatsapp = const WhatsAppQrData(),
     this.website = const WebsiteQrData(),
     this.wifi = const WifiQrData(),
     this.saving = const SaveState(),
@@ -82,6 +89,8 @@ class QrContentState {
   final FileState cv;
   final FileState cardImage;
   final SocialPageData socialPage;
+  final SocialMediaMode socialMediaMode;
+  final WhatsAppQrData whatsapp;
   final WebsiteQrData website;
   final WifiQrData wifi;
   final SaveState saving;
@@ -154,11 +163,52 @@ class QrContentState {
 
   static String? validateSocialLink(SocialNetwork network, String value) {
     if (value.trim().isEmpty) return 'Veuillez compléter ce lien.';
+    if (network == SocialNetwork.whatsapp &&
+        WhatsAppQrData.isLocalNumber(value)) {
+      return _missingCountryCode;
+    }
     return network.toUrl(value) == null ? network.invalidMessage : null;
   }
 
   static String? validateSocialLinks(List<SocialLink> links) =>
       links.isEmpty ? 'Ajoutez au moins un réseau.' : null;
+
+  static const String _missingCountryCode =
+      "Ajoutez l'indicatif du pays, par exemple +225 07 12 34 56 78.";
+
+  static String? validateWhatsAppTitle(String value) {
+    if (value.trim().isEmpty) return 'Veuillez saisir un titre.';
+    if (value.trim().length > WhatsAppQrData.maxTitleLength) {
+      return 'Le titre ne doit pas dépasser '
+          '${WhatsAppQrData.maxTitleLength} caractères.';
+    }
+    return null;
+  }
+
+  static String? validateWhatsAppPhone(String value) {
+    if (value.trim().isEmpty) return 'Veuillez saisir un numéro WhatsApp.';
+    if (WhatsAppQrData.isLocalNumber(value)) return _missingCountryCode;
+    return WhatsAppQrData.normalizePhone(value) == null
+        ? 'Veuillez saisir un numéro WhatsApp valide.'
+        : null;
+  }
+
+  // Numéro facultatif (carte de visite).
+  static String? validateOptionalWhatsAppPhone(String value) =>
+      value.trim().isEmpty ? null : validateWhatsAppPhone(value);
+
+  static String? validateWhatsAppMessage(String value) =>
+      value.trim().length > WhatsAppQrData.maxMessageLength
+      ? 'Le message ne doit pas dépasser '
+            '${WhatsAppQrData.maxMessageLength} caractères.'
+      : null;
+
+  static bool isValidWhatsApp(WhatsAppQrData data) =>
+      validateWhatsAppTitle(data.title) == null &&
+      validateWhatsAppPhone(data.phone) == null &&
+      validateWhatsAppMessage(data.message) == null;
+
+  bool get isWhatsAppValid => isValidWhatsApp(whatsapp);
 
   static String? validateWebsiteTitle(String value) =>
       value.trim().length > WebsiteQrData.maxTitleLength
@@ -227,7 +277,8 @@ class QrContentState {
   static bool isValidBusinessCard(BusinessCardData card) =>
       validateFirstName(card.firstName) == null &&
       validateLastName(card.lastName) == null &&
-      validateEmail(card.email) == null;
+      validateEmail(card.email) == null &&
+      validateOptionalWhatsAppPhone(card.whatsapp) == null;
 
   bool get isBusinessCardValid => isValidBusinessCard(businessCard);
 
@@ -239,6 +290,8 @@ class QrContentState {
     FileState? cv,
     FileState? cardImage,
     SocialPageData? socialPage,
+    SocialMediaMode? socialMediaMode,
+    WhatsAppQrData? whatsapp,
     WebsiteQrData? website,
     WifiQrData? wifi,
     SaveState? saving,
@@ -255,6 +308,8 @@ class QrContentState {
       cv: cv ?? this.cv,
       cardImage: cardImage ?? this.cardImage,
       socialPage: socialPage ?? this.socialPage,
+      socialMediaMode: socialMediaMode ?? this.socialMediaMode,
+      whatsapp: whatsapp ?? this.whatsapp,
       website: website ?? this.website,
       wifi: wifi ?? this.wifi,
       saving: saving ?? this.saving,

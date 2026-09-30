@@ -10,6 +10,7 @@ import '../models/saved_qr_code.dart';
 import '../models/social_network.dart';
 import '../models/text_qr_data.dart';
 import '../models/website_qr_data.dart';
+import '../models/whatsapp_qr_data.dart';
 import '../models/wifi_qr_data.dart';
 
 part 'qr_service.g.dart';
@@ -71,6 +72,10 @@ class QrService {
   String generateWebsitePayload(WebsiteQrData data) =>
       WebsiteQrData.normalizeUrl(data.url);
 
+  // Discussion WhatsApp : le lien wa.me lui-même, ouvert directement au
+  // scan. La saisie doit être valide (voir `QrContentState`).
+  String generateWhatsAppPayload(WhatsAppQrData data) => data.url ?? '';
+
   // Le texte est encodé tel quel, sans modification.
   String generateTextPayload(TextQrData data) => data.text;
 
@@ -96,6 +101,9 @@ class QrService {
       QrType.wifi => generateWifiPayload(WifiQrData.fromJson(saved.content)),
       QrType.website => generateWebsitePayload(
         WebsiteQrData.fromJson(saved.title, saved.content),
+      ),
+      QrType.socialMedia when saved.isWhatsApp => generateWhatsAppPayload(
+        WhatsAppQrData.fromJson(saved.title, saved.content),
       ),
       QrType.businessCard when saved.content['mode'] == 'details' =>
         generateBusinessCardPayload(

@@ -70,6 +70,7 @@ class AuthViewModel extends _$AuthViewModel {
       'Vérifiez votre connexion puis réessayez.';
   static const String unexpectedMessage =
       'Une erreur est survenue. Veuillez réessayer.';
+  static const String accountDeletedMessage = 'Votre compte a été supprimé.';
 
   static const int minPasswordLength = 8;
 
@@ -277,6 +278,46 @@ class AuthViewModel extends _$AuthViewModel {
   Future<void> logout() async {
     final tokens = ref.read(sessionTokenProvider);
     final service = ref.read(authServiceProvider);
+    await _leaveAccount([
+      if (tokens != null && service != null)
+        _quietly('Fin de session serveur', service.logout(tokens.refreshToken)),
+    ]);
+  }
+
+  // Suppression définitive du compte enregistré (Paramètres), puis sortie
+  // comme à la déconnexion : l'appareil repart avec l'utilisateur anonyme
+  // de l'installation. Renvoie le message à afficher : confirmation, ou
+  // erreur (la session est alors gardée).
+  Future<String> deleteAccount() async {
+    final service = ref.read(authServiceProvider);
+    if (!state.isAuthenticated || state.isSubmitting || service == null) {
+      return unexpectedMessage;
+    }
+    state = AuthState(
+      status: state.status,
+      user: state.user,
+      isSubmitting: true,
+    );
+    try {
+      await service.deleteAccount();
+    } catch (error, stackTrace) {
+      if (error is! ApiException) {
+        _log('Suppression du compte impossible', error, stackTrace);
+      }
+      // Session refusée pendant l'appel : elle a déjà été remplacée.
+      if (state.isSubmitting) {
+        state = AuthState(status: state.status, user: state.user);
+      }
+      return error is ApiException ? error.message : unexpectedMessage;
+    }
+    await _leaveAccount(const []);
+    return accountDeletedMessage;
+  }
+
+  // Sortie d'un compte (déconnexion, suppression) : session fermée
+  // localement tout de suite, nouvelle session anonyme, et déconnexion des
+  // SDK Google/Facebook, avec les appels serveur de `serverCalls`.
+  Future<void> _leaveAccount(List<Future<void>> serverCalls) async {
     final google = ref.read(googleAuthServiceProvider);
     final facebook = ref.read(facebookAuthServiceProvider);
     state = const AuthState();
@@ -284,8 +325,7 @@ class AuthViewModel extends _$AuthViewModel {
     await _deleteTokens();
     await Future.wait([
       _startAnonymousSession(),
-      if (tokens != null && service != null)
-        _quietly('Fin de session serveur', service.logout(tokens.refreshToken)),
+      ...serverCalls,
       _quietly('Déconnexion Google', google.signOut()),
       _quietly('Déconnexion Facebook', facebook.signOut()),
     ]);

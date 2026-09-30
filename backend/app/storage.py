@@ -52,6 +52,9 @@ class FileStore(Protocol):
     def delete(self, file_id: str) -> None:
         """Supprime le fichier (sans erreur s'il n'existe plus)."""
 
+    def delete_owned(self, owner_id: str) -> None:
+        """Supprime tous les fichiers mis en ligne par ce compte."""
+
 
 _COLUMNS = "id, kind, filename, content_type, size, owner_id"
 
@@ -124,6 +127,18 @@ class LocalFileStore:
             db.execute("DELETE FROM files WHERE id = ?", (file_id,))
         self._path(file_id).unlink(missing_ok=True)
 
+    def delete_owned(self, owner_id: str) -> None:
+        with self._connect() as db:
+            ids = [
+                row[0]
+                for row in db.execute(
+                    "SELECT id FROM files WHERE owner_id = ?", (owner_id,)
+                )
+            ]
+            db.execute("DELETE FROM files WHERE owner_id = ?", (owner_id,))
+        for file_id in ids:
+            self._path(file_id).unlink(missing_ok=True)
+
 
 class PostgresFileStore:
     """Fichiers stockés en `bytea` (10 MB maximum chacun)."""
@@ -195,6 +210,10 @@ class PostgresFileStore:
     def delete(self, file_id: str) -> None:
         with self._connect() as db:
             db.execute("DELETE FROM files WHERE id = %s", (file_id,))
+
+    def delete_owned(self, owner_id: str) -> None:
+        with self._connect() as db:
+            db.execute("DELETE FROM files WHERE owner_id = %s", (owner_id,))
 
 
 def create_store(settings: Settings) -> FileStore:

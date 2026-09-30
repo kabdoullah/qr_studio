@@ -6,6 +6,7 @@ utilise. Ajouter un type revient à ajouter une entrée à `CONTENTS`.
 """
 
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple
+from urllib.parse import quote
 
 from ...cards import FIELDS as CARD_FIELDS
 from ...social_networks import NETWORKS
@@ -173,7 +174,9 @@ def _apply_social_media(qr: QrCode, data: SocialMediaIn, _: StoredFiles) -> None
     profile = qr.social_media
     if profile is None:
         profile = qr.social_media = SocialMediaProfile()
+    profile.mode = data.mode
     profile.description = data.description
+    profile.message = data.message
     # Les liens sont remplacés : leur ordre est celui de la saisie.
     profile.links = [
         SocialMediaLink(
@@ -189,7 +192,9 @@ def _apply_social_media(qr: QrCode, data: SocialMediaIn, _: StoredFiles) -> None
 
 def _social_media_private(qr: QrCode, _: str) -> Dict[str, Any]:
     return {
+        "mode": qr.social_media.mode,
         "description": qr.social_media.description,
+        "message": qr.social_media.message,
         "links": [
             {
                 "platform": link.platform,
@@ -202,14 +207,22 @@ def _social_media_private(qr: QrCode, _: str) -> Dict[str, Any]:
     }
 
 
+def _whatsapp_url(url: str, message: str) -> str:
+    # Même lien que celui du QR Code : message encodé (espaces en %20).
+    return f"{url}?text={quote(message, safe='')}" if message else url
+
+
 def _social_media_public(qr: QrCode, _: str) -> Dict[str, Any]:
+    profile = qr.social_media
     return {
-        "description": qr.social_media.description,
+        "description": profile.description,
         "links": [
             {
                 "platform": link.platform,
                 "label": link.label or NETWORKS[link.platform].label,
-                "url": link.url,
+                "url": _whatsapp_url(link.url, profile.message)
+                if profile.mode == "whatsapp"
+                else link.url,
             }
             for link in qr.social_media.links
             if link.is_visible

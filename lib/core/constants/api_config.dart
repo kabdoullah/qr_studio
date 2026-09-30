@@ -9,3 +9,9 @@ Uri apiBaseUri(String url) {
   final uri = Uri.parse(url);
   return uri.path.endsWith('/') ? uri : uri.replace(path: '${uri.path}/');
 }
+
+// Politique de confidentialité, servie par le backend (exigée par Google
+// Play, accessible depuis les Paramètres). `null` sans serveur.
+final Uri? privacyPolicyUri = apiBaseUrl.isEmpty
+    ? null
+    : apiBaseUri(apiBaseUrl).resolve('privacy');
