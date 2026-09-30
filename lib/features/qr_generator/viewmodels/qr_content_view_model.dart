@@ -13,6 +13,7 @@ import '../models/qr_type.dart';
 import '../models/saved_qr_code.dart';
 import '../models/text_qr_data.dart';
 import '../models/website_qr_data.dart';
+import '../models/whatsapp_qr_data.dart';
 import '../models/wifi_qr_data.dart';
 import '../models/shared_file.dart';
 import '../models/social_network.dart';
@@ -84,6 +85,16 @@ class QrContentViewModel extends _$QrContentViewModel {
 
   void updateSocialPage(SocialPageData Function(SocialPageData page) update) {
     state = state.copyWith(socialPage: update(state.socialPage));
+  }
+
+  // Bascule entre la page de réseaux et la discussion WhatsApp. La saisie
+  // de l'autre mode est conservée.
+  void setSocialMediaMode(SocialMediaMode mode) {
+    state = state.copyWith(socialMediaMode: mode);
+  }
+
+  void updateWhatsApp(WhatsAppQrData Function(WhatsAppQrData data) update) {
+    state = state.copyWith(whatsapp: update(state.whatsapp));
   }
 
   // Ajoute une ligne vide pour ce réseau (dans la limite autorisée).
@@ -165,7 +176,8 @@ class QrContentViewModel extends _$QrContentViewModel {
   // deviennent toutes visibles), envoi du fichier ou enregistrement refusé
   // (le message est placé dans l'état).
   //
-  // Les types statiques (texte, Wi-Fi, coordonnées, site web) sont produits sur
+  // Les types statiques (texte, Wi-Fi, coordonnées, site web, discussion
+  // WhatsApp) sont produits sur
   // l'appareil : ils ne dépendent ni du compte ni du serveur, et un échec
   // d'enregistrement ne les empêche jamais d'être générés.
   Future<QrCodeData?> generateQr() async {
@@ -193,12 +205,17 @@ class QrContentViewModel extends _$QrContentViewModel {
       ),
       QrType.website when state.isWebsiteValid =>
         _qrService.generateWebsitePayload(state.website),
+      QrType.socialMedia
+          when state.socialMediaMode == SocialMediaMode.whatsapp &&
+              state.isWhatsAppValid =>
+        _qrService.generateWhatsAppPayload(state.whatsapp),
       _ => null,
     };
     final isValid = switch (type) {
       QrType.cv => true,
       QrType.businessCard when linkedKind != null => true,
-      QrType.socialMedia => state.isSocialPageValid,
+      QrType.socialMedia when state.socialMediaMode == SocialMediaMode.page =>
+        state.isSocialPageValid,
       _ =>
         staticPayload != null &&
             // Garde-fou : un contenu trop volumineux ne produirait pas de
@@ -234,7 +251,15 @@ class QrContentViewModel extends _$QrContentViewModel {
   // dans « Mes QR Codes » est tenté, et son échec (hors ligne, serveur
   // injoignable) n'est signalé que par un avertissement.
   Future<QrCodeData> _generateStatic(QrType type, String payload) async {
-    final result = QrCodeData(type: type, payload: payload);
+    final result = QrCodeData(
+      type: type,
+      payload: payload,
+      whatsapp:
+          type == QrType.socialMedia &&
+              state.socialMediaMode == SocialMediaMode.whatsapp
+          ? state.whatsapp
+          : null,
+    );
     // Sans serveur configuré, il n'y a rien à enregistrer.
     if (ref.read(qrCodeServiceProvider) == null) {
       state = state.copyWith(result: result);
@@ -291,6 +316,10 @@ class QrContentViewModel extends _$QrContentViewModel {
       QrType.website => state.copyWith(
         website: WebsiteQrData.fromJson(saved.title, content),
       ),
+      QrType.socialMedia when content['mode'] == 'whatsapp' => state.copyWith(
+        socialMediaMode: SocialMediaMode.whatsapp,
+        whatsapp: WhatsAppQrData.fromJson(saved.title, content),
+      ),
       QrType.socialMedia => state.copyWith(
         socialPage: SocialPageData.fromJson(saved.title, content),
       ),
@@ -328,6 +357,9 @@ class QrContentViewModel extends _$QrContentViewModel {
       type: saved.type,
       payload: _qrService.generateSavedPayload(saved),
       file: file,
+      whatsapp: saved.isWhatsApp
+          ? WhatsAppQrData.fromJson(saved.title, saved.content)
+          : null,
     );
   }
 
@@ -388,7 +420,15 @@ class QrContentViewModel extends _$QrContentViewModel {
     }
     final title = _titleFor(type, file);
     final content = _contentFor(type, file);
-    final editing = state.editing?.type == type ? state.editing : null;
+    // Une page déjà imprimée (`/q/{slug}`) ne devient jamais une discussion
+    // WhatsApp : changer de mode crée un nouveau QR Code.
+    final isWhatsApp =
+        type == QrType.socialMedia &&
+        state.socialMediaMode == SocialMediaMode.whatsapp;
+    final editing =
+        state.editing?.type == type && state.editing?.isWhatsApp == isWhatsApp
+        ? state.editing
+        : null;
 
     _setSave(SaveState(isSaving: true, type: type));
     try {
@@ -430,6 +470,9 @@ class QrContentViewModel extends _$QrContentViewModel {
     }
 
     final title = switch (type) {
+      QrType.socialMedia
+          when state.socialMediaMode == SocialMediaMode.whatsapp =>
+        state.whatsapp.title,
       QrType.socialMedia => state.socialPage.title,
       QrType.website =>
         state.website.title.trim().isNotEmpty
@@ -456,6 +499,9 @@ class QrContentViewModel extends _$QrContentViewModel {
         QrType.text => state.text.toJson(),
         QrType.wifi => state.wifi.toJson(),
         QrType.website => state.website.toJson(),
+        QrType.socialMedia
+            when state.socialMediaMode == SocialMediaMode.whatsapp =>
+          state.whatsapp.toJson(),
         QrType.socialMedia => state.socialPage.toJson(),
         QrType.cv => {'file_id': file?.remoteId},
         QrType.businessCard when file != null => {
@@ -562,9 +608,23 @@ LivePreview? livePreview(Ref ref) {
         );
       }
       return fromPayload(service.generateWebsitePayload(site));
-    // L'adresse publique d'un fichier ou d'une page n'existe qu'après
-    // l'enregistrement.
-    case QrType.cv || QrType.socialMedia || null:
+    case QrType.socialMedia:
+      final mode = ref.watch(
+        qrContentViewModelProvider.select((s) => s.socialMediaMode),
+      );
+      // L'adresse publique de la page n'existe qu'après l'enregistrement.
+      if (mode == SocialMediaMode.page) return null;
+      final whatsapp = ref.watch(
+        qrContentViewModelProvider.select((s) => s.whatsapp),
+      );
+      if (QrContentState.validateWhatsAppPhone(whatsapp.phone) != null) {
+        return const LivePreview.placeholder(
+          "Saisissez un numéro WhatsApp valide pour voir l'aperçu.",
+        );
+      }
+      return fromPayload(service.generateWhatsAppPayload(whatsapp));
+    // L'adresse publique d'un fichier n'existe qu'après sa mise en ligne.
+    case QrType.cv || null:
       return null;
   }
 }

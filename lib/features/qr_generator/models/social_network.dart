@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'whatsapp_qr_data.dart';
+
 // Réseaux proposés sur une page de réseaux sociaux. `name` est la clé
 // envoyée au serveur (`platform`), qui n'accepte pour chaque réseau que
 // ses domaines. Ajouter un réseau : une valeur ici et une entrée dans
@@ -119,10 +121,7 @@ enum SocialNetwork {
     final value = input.trim();
     if (value.isEmpty) return null;
     if (_hasScheme(value)) return value;
-    if (this == whatsapp) {
-      final digits = value.replaceAll(RegExp(r'\D'), '');
-      return digits.isEmpty ? null : 'https://wa.me/$digits';
-    }
+    if (this == whatsapp) return WhatsAppQrData.buildUrl(phoneNumber: value);
     // Un nom d'utilisateur peut contenir des points (« jean.dupont ») :
     // seul un « / » indique qu'il s'agit d'un lien.
     final base = profileBase;

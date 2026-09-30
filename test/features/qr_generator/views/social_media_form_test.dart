@@ -140,4 +140,46 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'WhatsApp direct : du formulaire au résultat, sans le lien brut',
+    (tester) async {
+      await openForm(tester);
+
+      await tester.tap(find.text('WhatsApp direct'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discussion WhatsApp'), findsOneWidget);
+      expect(find.text('Contactez-moi sur WhatsApp'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Générer le QR Code'));
+      await tapGenerate(tester);
+      expect(find.text('Veuillez saisir un numéro WhatsApp.'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Numéro WhatsApp *'),
+        '07 12 34 56 78',
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('indicatif du pays'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Numéro WhatsApp *'),
+        '+225 07 12 34 56 78',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Message prérempli (optionnel)'),
+        'Bonjour !',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Générer le QR Code'));
+      await tapGenerate(tester);
+
+      expect(find.byType(QrResultView), findsOneWidget);
+      expect(find.text('Votre QR Code WhatsApp est prêt'), findsOneWidget);
+      expect(find.text('Contactez-moi sur WhatsApp'), findsOneWidget);
+      expect(find.text('+2250712345678'), findsOneWidget);
+      expect(find.textContaining('wa.me'), findsNothing);
+      expect(service.created.single.content['mode'], 'whatsapp');
+    },
+  );
 }

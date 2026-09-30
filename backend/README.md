@@ -95,7 +95,10 @@ sont aussi enregistrés sur le compte.
   (`url`, https ; http seulement si `APP_ENV=development`), `wifi` (`ssid`,
   `security` parmi `none`/`WEP`/`WPA`/`WPA2`/`WPA3`, `password`, `hidden`),
   `social_media` (`description` ≤ 300, 1 à 15 `links` `{platform, url,
-  label?, is_visible?}` ; réseaux dans `app/social_networks.py`), `cv`
+  label?, is_visible?}` ; réseaux dans `app/social_networks.py` ; `mode`
+  `page` par défaut, ou `whatsapp` : un seul lien `whatsapp` (`https://wa.me/…`)
+  et `message` prérempli ≤ 300, le QR Code contenant alors le lien wa.me
+  lui-même), `cv`
   (`file_id` d'un PDF envoyé par ce compte), `business_card` (`mode`
   `details` + `details`, ou `image` + `file_id`). Titre : 1 à 100 caractères.
 - **Wi-Fi** : le mot de passe n'est renvoyé qu'au propriétaire, jamais par

@@ -26,6 +26,7 @@ class QrResultView extends ConsumerWidget {
 
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final whatsapp = result.whatsapp;
 
     return Scaffold(
       appBar: AppBar(),
@@ -48,7 +49,9 @@ class QrResultView extends ConsumerWidget {
                   Semantics(
                     header: true,
                     child: Text(
-                      result.type.readyMessage,
+                      whatsapp != null
+                          ? 'Votre QR Code WhatsApp est prêt'
+                          : result.type.readyMessage,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall,
                     ),
@@ -63,11 +66,25 @@ class QrResultView extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   QrPreviewCard(
-                    title: result.file?.name ?? result.type.title,
+                    title:
+                        whatsapp?.title ??
+                        result.file?.name ??
+                        result.type.title,
                     child: QrPreview(data: result.payload, style: result.style),
                   ),
+                  // Discussion WhatsApp : le numéro plutôt que le lien brut.
+                  if (whatsapp != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    SelectableText(
+                      whatsapp.displayPhone,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ]
                   // Lien encodé, pour un contenu en ligne.
-                  if (result.isOnlineLink) ...[
+                  else if (result.isOnlineLink) ...[
                     const SizedBox(height: AppSpacing.sm),
                     SelectableText(
                       result.payload,
