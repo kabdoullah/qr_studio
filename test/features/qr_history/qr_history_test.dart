@@ -293,6 +293,82 @@ void main() {
     });
   });
 
+  group('lancement hors ligne (session impossible à ouvrir)', () {
+    late FakeAuthService auth;
+    late FakeTokenStorage storage;
+
+    Future<ProviderContainer> launch() async {
+      final container = ProviderContainer(
+        overrides: signedIn(
+          auth: auth,
+          storage: storage,
+          qrCodes: service,
+          historyCache: cache,
+        ),
+      );
+      addTearDown(container.dispose);
+      container.listen(qrHistoryViewModelProvider, (_, _) {});
+      await container.read(qrHistoryViewModelProvider.notifier).revalidate();
+      return container;
+    }
+
+    setUp(() {
+      auth = FakeAuthService()
+        ..refreshError = const ApiException(ApiErrorKind.offline);
+      storage = FakeTokenStorage('refresh-token');
+      cache.entries[awaUser.id] = [wifi];
+    });
+
+    test('la liste enregistrée s’affiche avec le message', () async {
+      final container = await launch();
+
+      final state = container.read(qrHistoryViewModelProvider);
+      expect(state.items?.map((q) => q.id), ['wifi']);
+      expect(state.isRevalidating, isFalse);
+      expect(state.errorMessage, AuthViewModel.restoreFailedMessage);
+    });
+
+    test('session refusée : la liste enregistrée n’est pas affichée', () async {
+      auth
+        ..refreshError = const ApiException(ApiErrorKind.unauthorized)
+        ..anonymousError = const ApiException(ApiErrorKind.offline);
+
+      final state = (await launch()).read(qrHistoryViewModelProvider);
+
+      expect(state.hasItems, isFalse);
+      expect(state.errorMessage, isNotNull);
+    });
+
+    test('aucune session enregistrée : rien d’affiché', () async {
+      storage = FakeTokenStorage();
+      auth.anonymousError = const ApiException(ApiErrorKind.offline);
+
+      final state = (await launch()).read(qrHistoryViewModelProvider);
+
+      expect(state.hasItems, isFalse);
+    });
+
+    test('plusieurs comptes sur l’appareil : rien d’affiché', () async {
+      cache.entries['autre-compte'] = [website];
+
+      final state = (await launch()).read(qrHistoryViewModelProvider);
+
+      expect(state.hasItems, isFalse);
+    });
+
+    test('réseau revenu : Réessayer charge la liste du serveur', () async {
+      final container = await launch();
+      auth.refreshError = null;
+
+      await container.read(qrHistoryViewModelProvider.notifier).revalidate();
+      await pumpEventQueue();
+
+      final state = container.read(qrHistoryViewModelProvider);
+      expect(state.items?.map((q) => q.id), ['site', 'wifi']);
+      expect(state.errorMessage, isNull);
+    });
+  });
+
   group('écran Mes QR Codes', () {
     late FakeQrShareService sharer;
 
@@ -554,6 +630,40 @@ void main() {
 
       expect(cache.clears, 1);
       expect(cache.entries, isEmpty);
+    });
+
+    testWidgets('lancement avec la session d’un autre compte : l’historique '
+        'du précédent est effacé', (tester) async {
+      cache.entries['autre-compte'] = [wifi];
+      await openHistory(tester);
+
+      expect(cache.entries.keys, [awaUser.id]);
+    });
+
+    testWidgets('lancement hors ligne : liste enregistrée et message', (
+      tester,
+    ) async {
+      cache.entries[awaUser.id] = [website];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: signedIn(
+            auth: FakeAuthService()
+              ..refreshError = const ApiException(ApiErrorKind.offline),
+            qrCodes: service,
+            historyCache: cache,
+          ),
+          child: const QrStudioApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Paramètres'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mes QR Codes'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mon portfolio'), findsOneWidget);
+      expect(find.text(AuthViewModel.restoreFailedMessage), findsOneWidget);
+      expect(find.text('Réessayer'), findsNothing);
     });
 
     testWidgets('liste vide', (tester) async {
