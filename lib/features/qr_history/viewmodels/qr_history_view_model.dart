@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/storage/token_storage.dart';
 import '../../auth/viewmodels/auth_view_model.dart';
 import '../../qr_generator/models/saved_qr_code.dart';
 import '../../qr_generator/services/qr_code_service.dart';
@@ -90,15 +91,22 @@ class QrHistoryViewModel extends _$QrHistoryViewModel {
       state = state.copyWith(errorMessage: () => unavailableMessage);
       return;
     }
-    // Session encore en cours d'ouverture (lancement) : l'attendre. Une fois
-    // ouverte, le changement d'utilisateur relance le chargement (`build`).
+    // Session encore en cours d'ouverture (lancement) : l'attendre, avec la
+    // liste enregistrée sur l'appareil. Une fois ouverte, le changement
+    // d'utilisateur relance le chargement (`build`). Si elle ne peut pas
+    // s'ouvrir (hors ligne), cette liste reste affichée avec le message.
     final auth = ref.read(authViewModelProvider.notifier);
     if (ref.read(authViewModelProvider).user == null) {
+      final version = _version;
       state = state.copyWith(isRevalidating: true, errorMessage: () => null);
-      if (!await auth.ensureSession() && ref.mounted) {
-        state = state.copyWith(
-          isRevalidating: false,
-          errorMessage: () =>
+      await _showKeptAccount(version);
+      if (await auth.ensureSession()) return;
+      // Session refusée pendant l'ouverture : ce n'est plus sa liste.
+      final keepItems = await _hasStoredSession();
+      if (_isCurrent(version)) {
+        state = QrHistoryState(
+          items: keepItems ? state.items : null,
+          errorMessage:
               ref.read(authViewModelProvider).notice ?? loadFailedMessage,
         );
       }
@@ -143,6 +151,25 @@ class QrHistoryViewModel extends _$QrHistoryViewModel {
     final cached = await ref.read(qrHistoryCacheProvider).read(userId);
     if (cached != null && _isCurrent(version) && !state.hasItems) {
       state = state.copyWith(items: cached);
+    }
+  }
+
+  // Session pas encore ouverte : la liste du compte gardé sur l'appareil,
+  // seulement si sa session y est encore enregistrée (déconnexion ou session
+  // refusée : jamais).
+  Future<void> _showKeptAccount(int version) async {
+    if (state.hasItems || !await _hasStoredSession()) return;
+    final cached = await ref.read(qrHistoryCacheProvider).readKeptAccount();
+    if (cached != null && _isCurrent(version) && !state.hasItems) {
+      state = state.copyWith(items: cached);
+    }
+  }
+
+  Future<bool> _hasStoredSession() async {
+    try {
+      return await ref.read(tokenStorageProvider).read() != null;
+    } catch (_) {
+      return false;
     }
   }
 

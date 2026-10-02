@@ -15,16 +15,20 @@ class QrStudioApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Changement d'utilisateur (déconnexion, connexion à un autre compte) :
     // la saisie et l'historique enregistré du précédent ne doivent rester
-    // ni en mémoire ni sur l'appareil. La conversion d'un utilisateur
-    // anonyme en compte garde le même `id` : rien n'est effacé.
+    // ni en mémoire ni sur l'appareil. L'appareil ne garde que l'historique
+    // du compte ouvert, y compris au lancement (session d'un autre compte
+    // que celui du cache). La conversion d'un utilisateur anonyme en compte
+    // garde le même `id` : rien n'est effacé.
     ref.listen(authViewModelProvider.select((s) => s.user?.id), (
       previousId,
       userId,
     ) {
-      if (previousId != null && userId != previousId) {
+      if (userId == previousId) return;
+      if (previousId != null) {
         ref.read(qrContentViewModelProvider.notifier).startOver();
-        ref.read(qrHistoryCacheProvider).clear();
       }
+      final cache = ref.read(qrHistoryCacheProvider);
+      userId == null ? cache.clear() : cache.keepOnly(userId);
     });
     return MaterialApp.router(
       title: 'QR Studio',

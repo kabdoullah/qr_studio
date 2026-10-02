@@ -518,8 +518,18 @@ class FakeQrHistoryCache implements QrHistoryCache {
   }
 
   @override
+  Future<List<SavedQrCode>?> readKeptAccount() async {
+    await readGate?.future;
+    return entries.length == 1 ? entries.values.single : null;
+  }
+
+  @override
   Future<void> write(String userId, List<SavedQrCode> items) async =>
       entries[userId] = List.of(items);
+
+  @override
+  Future<void> keepOnly(String userId) async =>
+      entries.removeWhere((id, _) => id != userId);
 
   @override
   Future<void> clear() async {

@@ -104,13 +104,29 @@ void main() {
     expect(await store.read('user-2'), isNull);
   });
 
+  test('ne garder qu’un compte : sa liste se relit sans son id', () async {
+    final store = cache();
+    await store.write('user-1', [wifi]);
+    await store.write('user-2', [wifi]);
+    expect(await store.readKeptAccount(), isNull);
+
+    await store.keepOnly('user-2');
+    await Hive.close();
+
+    final reopened = cache();
+    expect(await reopened.read('user-1'), isNull);
+    expect((await reopened.readKeptAccount())?.single.id, 'wifi');
+  });
+
   test('stockage indisponible : lecture vide, écriture sans erreur', () async {
     final store = HiveQrHistoryCache(
       initHive: () async => throw const FileSystemException('lecture seule'),
     );
 
     expect(await store.read('user-1'), isNull);
+    expect(await store.readKeptAccount(), isNull);
     await store.write('user-1', [wifi]);
+    await store.keepOnly('user-1');
     await store.clear();
   });
 }

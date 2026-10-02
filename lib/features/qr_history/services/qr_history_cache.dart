@@ -10,11 +10,18 @@ import '../../qr_generator/models/saved_qr_code.dart';
 part 'qr_history_cache.g.dart';
 
 // Dernière liste « Mes QR Codes » connue, par compte, affichée au prochain
-// lancement avant la réponse du serveur. Jamais bloquant : une erreur de
-// cache se lit comme un cache vide.
+// lancement avant la réponse du serveur. Seul le compte connecté y est gardé
+// (`keepOnly`). Jamais bloquant : une erreur de cache se lit comme un cache
+// vide.
 abstract interface class QrHistoryCache {
   Future<List<SavedQrCode>?> read(String userId);
+  // Liste du seul compte gardé, sans connaître son id : affichée quand la
+  // session n'a pas pu s'ouvrir (hors ligne au lancement). `null` si
+  // l'appareil n'en garde aucun, ou plusieurs.
+  Future<List<SavedQrCode>?> readKeptAccount();
   Future<void> write(String userId, List<SavedQrCode> items);
+  // Efface les listes des autres comptes (changement de compte).
+  Future<void> keepOnly(String userId);
   // Efface tout (déconnexion).
   Future<void> clear();
 }
@@ -74,9 +81,16 @@ class HiveQrHistoryCache implements QrHistoryCache {
   }
 
   @override
-  Future<List<SavedQrCode>?> read(String userId) async {
+  Future<List<SavedQrCode>?> read(String userId) =>
+      _read((box) => box.get(userId));
+
+  @override
+  Future<List<SavedQrCode>?> readKeptAccount() =>
+      _read((box) => box.length == 1 ? box.get(box.keys.single) : null);
+
+  Future<List<SavedQrCode>?> _read(String? Function(Box<String>) entry) async {
     try {
-      final raw = (await _open()).get(userId);
+      final raw = entry(await _open());
       if (raw == null) return null;
       if (jsonDecode(raw) case {
         'version': formatVersion,
@@ -103,6 +117,16 @@ class HiveQrHistoryCache implements QrHistoryCache {
       );
     } catch (error, stackTrace) {
       _log('Écriture du cache impossible', error, stackTrace);
+    }
+  }
+
+  @override
+  Future<void> keepOnly(String userId) async {
+    try {
+      final box = await _open();
+      await box.deleteAll(box.keys.where((key) => key != userId).toList());
+    } catch (error, stackTrace) {
+      _log('Effacement du cache impossible', error, stackTrace);
     }
   }
 
