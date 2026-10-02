@@ -94,18 +94,27 @@ void main() {
       expect(state().isRevalidating, isFalse);
     });
 
-    test('échec du rechargement : liste connue gardée, message', () async {
+    test('hors ligne : liste connue gardée, sans message', () async {
       await viewModel().revalidate();
-      service.error = const ApiException(ApiErrorKind.offline);
+
+      for (final kind in [ApiErrorKind.offline, ApiErrorKind.timeout]) {
+        service.error = ApiException(kind);
+        await viewModel().revalidate();
+
+        expect(ids(), ['site', 'wifi']);
+        expect(state().errorMessage, isNull);
+        expect(state().isRevalidating, isFalse);
+      }
+    });
+
+    test('erreur du serveur : liste connue gardée, message', () async {
+      await viewModel().revalidate();
+      service.error = const ApiException(ApiErrorKind.server);
 
       await viewModel().revalidate();
 
       expect(ids(), ['site', 'wifi']);
-      expect(
-        state().errorMessage,
-        const ApiException(ApiErrorKind.offline).message,
-      );
-      expect(state().isRevalidating, isFalse);
+      expect(state().errorMessage, QrHistoryViewModel.loadFailedMessage);
     });
 
     test('échec du premier chargement : message, aucune liste', () async {
@@ -250,7 +259,7 @@ void main() {
           await viewModel().revalidate();
 
           expect(ids(), ['wifi']);
-          expect(state().errorMessage, isNotNull);
+          expect(state().errorMessage, isNull);
           // Un échec n'efface pas le cache.
           expect(cache.entries[userId], hasLength(1));
         },
@@ -319,13 +328,13 @@ void main() {
       cache.entries[awaUser.id] = [wifi];
     });
 
-    test('la liste enregistrée s’affiche avec le message', () async {
+    test('la liste enregistrée s’affiche, sans message', () async {
       final container = await launch();
 
       final state = container.read(qrHistoryViewModelProvider);
       expect(state.items?.map((q) => q.id), ['wifi']);
       expect(state.isRevalidating, isFalse);
-      expect(state.errorMessage, AuthViewModel.restoreFailedMessage);
+      expect(state.errorMessage, isNull);
     });
 
     test('session refusée : la liste enregistrée n’est pas affichée', () async {
@@ -581,7 +590,7 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNothing);
     });
 
-    testWidgets('actualisation impossible : liste gardée et message', (
+    testWidgets('actualisation hors ligne : liste gardée, sans message', (
       tester,
     ) async {
       await openHistory(tester);
@@ -597,7 +606,7 @@ void main() {
       expect(find.text('Mon portfolio'), findsOneWidget);
       expect(
         find.text(const ApiException(ApiErrorKind.offline).message),
-        findsOneWidget,
+        findsNothing,
       );
     });
 
@@ -640,7 +649,7 @@ void main() {
       expect(cache.entries.keys, [awaUser.id]);
     });
 
-    testWidgets('lancement hors ligne : liste enregistrée et message', (
+    testWidgets('lancement hors ligne : liste enregistrée, sans message', (
       tester,
     ) async {
       cache.entries[awaUser.id] = [website];
@@ -662,7 +671,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Mon portfolio'), findsOneWidget);
-      expect(find.text(AuthViewModel.restoreFailedMessage), findsOneWidget);
+      expect(find.text(AuthViewModel.restoreFailedMessage), findsNothing);
       expect(find.text('Réessayer'), findsNothing);
     });
 

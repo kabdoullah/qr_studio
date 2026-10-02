@@ -94,7 +94,7 @@ class QrHistoryViewModel extends _$QrHistoryViewModel {
     // Session encore en cours d'ouverture (lancement) : l'attendre, avec la
     // liste enregistrée sur l'appareil. Une fois ouverte, le changement
     // d'utilisateur relance le chargement (`build`). Si elle ne peut pas
-    // s'ouvrir (hors ligne), cette liste reste affichée avec le message.
+    // s'ouvrir (hors ligne), cette liste reste affichée, sans message.
     final auth = ref.read(authViewModelProvider.notifier);
     if (ref.read(authViewModelProvider).user == null) {
       final version = _version;
@@ -104,10 +104,12 @@ class QrHistoryViewModel extends _$QrHistoryViewModel {
       // Session refusée pendant l'ouverture : ce n'est plus sa liste.
       final keepItems = await _hasStoredSession();
       if (_isCurrent(version)) {
+        final items = keepItems ? state.items : null;
         state = QrHistoryState(
-          items: keepItems ? state.items : null,
-          errorMessage:
-              ref.read(authViewModelProvider).notice ?? loadFailedMessage,
+          items: items,
+          errorMessage: items != null
+              ? null
+              : ref.read(authViewModelProvider).notice ?? loadFailedMessage,
         );
       }
       return;
@@ -126,10 +128,14 @@ class QrHistoryViewModel extends _$QrHistoryViewModel {
       if (_isCurrent(version)) {
         state = state.copyWith(
           isRevalidating: false,
-          errorMessage: () =>
-              error is ApiException && error.kind != ApiErrorKind.server
-              ? error.message
-              : loadFailedMessage,
+          errorMessage: () => switch (error) {
+            // Hors ligne avec une liste affichée : elle suffit, sans message.
+            ApiException(kind: ApiErrorKind.offline || ApiErrorKind.timeout)
+                when state.hasItems =>
+              null,
+            ApiException(kind: != ApiErrorKind.server) => error.message,
+            _ => loadFailedMessage,
+          },
         );
       }
     } finally {
